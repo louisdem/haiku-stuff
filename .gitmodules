@@ -1,0 +1,3 @@
+[submodule "intel_extreme"]
+	path = intel_extreme
+	url = git://github.com/druga/crap.git
