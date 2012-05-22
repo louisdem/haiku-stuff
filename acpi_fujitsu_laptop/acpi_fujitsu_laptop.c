@@ -216,7 +216,7 @@ acpi_fjl_init_driver(device_node *node, void **_driverCookie)
 
 	TRACE("init_driver()\n");
 
-	prefix = (char *) calloc(1, strlen(acpi_fujitsu.full_query.path) + 6);
+	prefix = (char *) malloc(strlen(acpi_fujitsu.full_query.path) + 6);
 	/* path prefix, required cause of lack of cookie?! */
 	sprintf(prefix, "%s.%s", acpi_fujitsu.full_query.path, "ABCD"); // concat
 
@@ -326,7 +326,7 @@ void c------------------------------() {}
 
 static const char *get_full_query(const char *dev, char *const what)
 {
-	strncpy(acpi_fujitsu.full_query.dev_name, dev, strlen(dev)-1);
+	//strncpy(acpi_fujitsu.full_query.dev_name, dev, 4);
 	strcpy(acpi_fujitsu.full_query.what, what);
 
 	return acpi_fujitsu.full_query.path;
