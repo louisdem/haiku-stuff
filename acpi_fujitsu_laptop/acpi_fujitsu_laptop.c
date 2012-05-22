@@ -1,3 +1,9 @@
+/* Written by Artem Falcon <lomka@gero.in> */
+
+#ifndef _KERNEL_MODE
+#error "They only support kernel mode ACPI. Sigh :("
+#endif
+
 #include <KernelExport.h>
 #include <Drivers.h>
 #include <Errors.h>
@@ -35,13 +41,21 @@ typedef struct acpi_ns_device_info {
 /* bypass device/driver separation */
 struct {
 	acpi_module_info *acpi;
-	const char *full_path;
-	char *what;
+	struct {
+		char *path;
+		char *dev_name;
+		char *what;
+
+		const char *hid_dev_name;
+		//const char *htk_dev_name;
+	} full_query;
 } acpi_fujitsu;
 
+static int fjl_hw_get_lcd_level(void);
 static bool fjl_hw_set_lcd_level(int);
 
-//	#pragma mark - device module API
+//	#pragma mark -
+// device module API
 
 
 static status_t
@@ -121,7 +135,8 @@ acpi_fjl_free (void* cookie)
 }
 
 
-//	#pragma mark - driver module API
+//	#pragma mark -
+// driver module API
 
 
 static float
@@ -151,12 +166,15 @@ acpi_fjl_support(device_node *parent)
 			/*|| strcmp(hid, "FUJ02B1")*/) {
 		//dprintf("acpi_fujitsu_laptop: ACPI path: %s\n", path);
 
-		if (strstr(path, "FJEX")) {
+		if ((acpi_fujitsu.full_query.hid_dev_name = strstr(path, "FJEX"))) { // backlight control
 			TRACE("Found supported device\n");
 
-			acpi_fujitsu.full_path = path;
+			acpi_fujitsu.full_query.path = (char *) path;
 			return 0.6;
 		}
+		/*else
+			acpi_fujitsu.full_query.htk_dev_name = strstr(path,
+				"FEXT"*/ /* aka FUJ02E3, hotkeys device */ /*);*/
 	}
 
 	return 0.0;
@@ -179,17 +197,24 @@ static status_t
 acpi_fjl_init_driver(device_node *node, void **_driverCookie)
 {
 	char *prefix;
-	TRACE("init_driver()\n");
-
 	*_driverCookie = node;
 
-	prefix = (char *) calloc(1, strlen(acpi_fujitsu.full_path) + 6);
-	/* path prefix, required cause of lack of cookie?! */
-	sprintf(prefix, "%s%s", acpi_fujitsu.full_path, ".ABCD");
-	acpi_fujitsu.what = strstr(prefix, "ABCD");
-	acpi_fujitsu.full_path = prefix;
+	TRACE("init_driver()\n");
 
-	fjl_hw_set_lcd_level(255);
+	prefix = (char *) calloc(1, strlen(acpi_fujitsu.full_query.path) + 6);
+	/* path prefix, required cause of lack of cookie?! */
+	sprintf(prefix, "%s.%s", acpi_fujitsu.full_query.path, "ABCD"); // concat
+
+	acpi_fujitsu.full_query.dev_name = strstr(prefix, acpi_fujitsu.full_query.hid_dev_name);
+	acpi_fujitsu.full_query.what = strstr(acpi_fujitsu.full_query.dev_name, "ABCD");
+
+	acpi_fujitsu.full_query.path = prefix;
+
+	/*fjl_hw_get_lcd_level();
+	fjl_hw_set_lcd_level(4);
+	fjl_hw_get_lcd_level();*/
+
+	//dprintf("acpi_fujitsu_laptop: HTK: %s\n", acpi_fujitsu.full_query.htk_dev_name);
 
 	return B_OK;
 }
@@ -198,6 +223,9 @@ acpi_fjl_init_driver(device_node *node, void **_driverCookie)
 static void
 acpi_fjl_uninit_driver(void *driverCookie)
 {
+	//TRACE("uninit_driver()\n");
+
+	free(acpi_fujitsu.full_query.path);
 }
 
 
@@ -279,21 +307,55 @@ module_info *modules[] = {
 void c------------------------------() {}
 */
 
+static const char *get_full_query(const char *dev, char *const what)
+{
+	strncpy(acpi_fujitsu.full_query.dev_name, dev, strlen(dev)-1);
+	strcpy(acpi_fujitsu.full_query.what, what);
+
+	return acpi_fujitsu.full_query.path;
+}
+
+static int fjl_hw_get_lcd_level(void)
+{
+	unsigned int level;
+	acpi_object_type arg0;
+	acpi_data arg_data;
+
+	//bool brightness_changed;
+
+	arg_data.pointer = &arg0;
+	arg_data.length = sizeof(acpi_object_type);
+
+	if (acpi_fujitsu.acpi->evaluate_method(NULL,
+		get_full_query(acpi_fujitsu.full_query.hid_dev_name, "GBLL"), NULL, &arg_data) != B_OK
+		|| arg0.object_type != ACPI_TYPE_INTEGER)
+		return -1;
+
+	level = arg0.data.integer & 0x0fffffff;
+	//brightness_changed = (arg0.data.integer & 0x80000000) ? true : false;
+
+	dprintf("acpi_fujitsu_laptop: fjl_hw_get_lcd_level()"/* { brightness_changed = %d }*/" = %d\n",
+		/*brightness_changed,*/ level);
+
+	return level;
+}
+
 static bool fjl_hw_set_lcd_level(int level)
 {
 	acpi_handle handle = NULL;
 	acpi_object_type arg0;
 	acpi_objects arg_list;
+
 	arg0.object_type = ACPI_TYPE_INTEGER;
 	arg0.data.integer = level;
 	arg_list.count = 1;
 	arg_list.pointer = &arg0;
 
-	strcpy(acpi_fujitsu.what, "SBLL");
 	dprintf("acpi_fujitsu_laptop: fjl_hw_set_lcd_level(level = %d"/*, path = %s*/")\n", level
 		/*,acpi_fujitsu.full_path*/);
 
-	if (acpi_fujitsu.acpi->get_handle(NULL, acpi_fujitsu.full_path, &handle) != B_OK) {
+	if (acpi_fujitsu.acpi->get_handle(NULL, get_full_query(acpi_fujitsu.full_query.hid_dev_name,
+		"SBLL"), &handle) != B_OK) {
 		TRACE("SBLL wasn't found\n");
 		return false;
 	}
