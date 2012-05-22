@@ -5,7 +5,6 @@
 #endif
 
 #include <KernelExport.h>
-#include <Drivers.h>
 #include <Errors.h>
 #include <string.h>
 
@@ -13,6 +12,7 @@
 #include <stdlib.h>
 
 #include <ACPI.h>
+#include "acpi_fujitsu_common.h"
 
 #define TRACE_FJL 1
 #ifdef TRACE_FJL
@@ -49,8 +49,10 @@ struct {
 		const char *hid_dev_name;
 		//const char *htk_dev_name;
 	} full_query;
+	unsigned int max_brightness;
 } acpi_fujitsu;
 
+static int fjl_hw_get_max_brightness(void);
 static int fjl_hw_get_lcd_level(void);
 static bool fjl_hw_set_lcd_level(int);
 
@@ -117,7 +119,20 @@ acpi_fjl_control(void* _cookie, uint32 op, void* arg, size_t len)
 {
 	//acpi_fjl_device_info* device = (acpi_fjl_device_info*)_cookie;
 
-	return B_ERROR;
+	switch (op) {
+		case GET_BACKLIGHT_LIMIT: {
+			return user_memcpy(arg, &acpi_fujitsu.max_brightness, sizeof(unsigned int));
+		}
+		case GET_BACKLIGHT_LEVEL: {
+			int level = fjl_hw_get_lcd_level();
+			return user_memcpy(arg, &level, sizeof(int));
+		}
+		case SET_BACKLIGHT_LEVEL: {
+			return fjl_hw_set_lcd_level(*(int*)arg) ? B_OK : B_ERROR;
+		}
+	}
+
+	return B_DEV_INVALID_IOCTL;
 }
 
 
@@ -210,6 +225,8 @@ acpi_fjl_init_driver(device_node *node, void **_driverCookie)
 
 	acpi_fujitsu.full_query.path = prefix;
 
+	if (fjl_hw_get_max_brightness() < 0)
+		return B_ERROR;
 	/*fjl_hw_get_lcd_level();
 	fjl_hw_set_lcd_level(4);
 	fjl_hw_get_lcd_level();*/
@@ -315,6 +332,25 @@ static const char *get_full_query(const char *dev, char *const what)
 	return acpi_fujitsu.full_query.path;
 }
 
+static int fjl_hw_get_max_brightness(void)
+{
+	acpi_object_type arg0;
+	acpi_data arg_data;
+
+	arg_data.pointer = &arg0;
+	arg_data.length = sizeof(acpi_object_type);
+
+	if (acpi_fujitsu.acpi->evaluate_method(NULL,
+		get_full_query(acpi_fujitsu.full_query.hid_dev_name, "RBLL"), NULL, &arg_data) != B_OK
+		|| arg0.object_type != ACPI_TYPE_INTEGER)
+		return -1;
+
+	dprintf("acpi_fujitsu_laptop: fjl_hw_get_max_brightness() = %d\n",
+		(int) arg0.data.integer);
+
+	return acpi_fujitsu.max_brightness = arg0.data.integer;
+}
+
 static int fjl_hw_get_lcd_level(void)
 {
 	unsigned int level;
@@ -328,8 +364,9 @@ static int fjl_hw_get_lcd_level(void)
 
 	if (acpi_fujitsu.acpi->evaluate_method(NULL,
 		get_full_query(acpi_fujitsu.full_query.hid_dev_name, "GBLL"), NULL, &arg_data) != B_OK
-		|| arg0.object_type != ACPI_TYPE_INTEGER)
-		return -1;
+		|| arg0.object_type != ACPI_TYPE_INTEGER) {
+			return -1;
+		}
 
 	level = arg0.data.integer & 0x0fffffff;
 	//brightness_changed = (arg0.data.integer & 0x80000000) ? true : false;
@@ -350,6 +387,9 @@ static bool fjl_hw_set_lcd_level(int level)
 	arg0.data.integer = level;
 	arg_list.count = 1;
 	arg_list.pointer = &arg0;
+
+	if (level >= acpi_fujitsu.max_brightness)
+		return false;
 
 	dprintf("acpi_fujitsu_laptop: fjl_hw_set_lcd_level(level = %d"/*, path = %s*/")\n", level
 		/*,acpi_fujitsu.full_path*/);
