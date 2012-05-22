@@ -1,5 +1,5 @@
-#ifndef _ACPI_THINKPAD_P_H
-#define _ACPI_THINKPAD_P_H
+#ifndef _ACPI_FUJITSU_P_H
+#define _ACPI_FUJITSU_P_H
 
 #include <Drivers.h>
 
