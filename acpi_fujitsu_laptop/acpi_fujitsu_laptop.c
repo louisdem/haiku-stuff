@@ -54,7 +54,7 @@ struct {
 
 static int fjl_hw_get_max_brightness(void);
 static int fjl_hw_get_lcd_level(void);
-static bool fjl_hw_set_lcd_level(int);
+static status_t fjl_hw_set_lcd_level(int);
 
 //	#pragma mark -
 // device module API
@@ -128,7 +128,7 @@ acpi_fjl_control(void* _cookie, uint32 op, void* arg, size_t len)
 			return user_memcpy(arg, &level, sizeof(int));
 		}
 		case SET_BACKLIGHT_LEVEL: {
-			return fjl_hw_set_lcd_level(*(int*)arg) ? B_OK : B_ERROR;
+			return fjl_hw_set_lcd_level(*(int*)arg);
 		}
 	}
 
@@ -200,7 +200,7 @@ static status_t
 acpi_fjl_register_device(device_node *node)
 {
 	device_attr attrs[] = {
-		{ B_DEVICE_PRETTY_NAME, B_STRING_TYPE, { string: "ACPI Fujitsu-Siemens Laptop driver" }},
+		{ B_DEVICE_PRETTY_NAME, B_STRING_TYPE, { string: "Fujitsu-Siemens Laptop ACPI driver" }},
 		{ NULL }
 	};
 
@@ -216,9 +216,8 @@ acpi_fjl_init_driver(device_node *node, void **_driverCookie)
 
 	TRACE("init_driver()\n");
 
-	prefix = (char *) malloc(strlen(acpi_fujitsu.full_query.path) + 6);
 	/* path prefix, required cause of lack of cookie?! */
-	sprintf(prefix, "%s.%s", acpi_fujitsu.full_query.path, "ABCD"); // concat
+	prefix = strcat(acpi_fujitsu.full_query.path, ".ABCD");
 
 	acpi_fujitsu.full_query.dev_name = strstr(prefix, acpi_fujitsu.full_query.hid_dev_name);
 	acpi_fujitsu.full_query.what = strstr(acpi_fujitsu.full_query.dev_name, "ABCD");
@@ -241,8 +240,6 @@ static void
 acpi_fjl_uninit_driver(void *driverCookie)
 {
 	//TRACE("uninit_driver()\n");
-
-	free(acpi_fujitsu.full_query.path);
 }
 
 
@@ -326,7 +323,7 @@ void c------------------------------() {}
 
 static const char *get_full_query(const char *dev, char *const what)
 {
-	//strncpy(acpi_fujitsu.full_query.dev_name, dev, 4);
+	//strncpy(acpi_fujitsu.full_query.dev_name, dev, strlen(dev));
 	strcpy(acpi_fujitsu.full_query.what, what);
 
 	return acpi_fujitsu.full_query.path;
@@ -377,7 +374,7 @@ static int fjl_hw_get_lcd_level(void)
 	return level;
 }
 
-static bool fjl_hw_set_lcd_level(int level)
+static status_t fjl_hw_set_lcd_level(int level)
 {
 	acpi_handle handle = NULL;
 	acpi_object_type arg0;
@@ -389,7 +386,7 @@ static bool fjl_hw_set_lcd_level(int level)
 	arg_list.pointer = &arg0;
 
 	if (level >= acpi_fujitsu.max_brightness)
-		return false;
+		return B_ERROR;
 
 	dprintf("acpi_fujitsu_laptop: fjl_hw_set_lcd_level(level = %d"/*, path = %s*/")\n", level
 		/*,acpi_fujitsu.full_path*/);
@@ -397,11 +394,11 @@ static bool fjl_hw_set_lcd_level(int level)
 	if (acpi_fujitsu.acpi->get_handle(NULL, get_full_query(acpi_fujitsu.full_query.hid_dev_name,
 		"SBLL"), &handle) != B_OK) {
 		TRACE("SBLL wasn't found\n");
-		return false;
+		return B_ERROR;
 	}
 
 	if (acpi_fujitsu.acpi->evaluate_method(handle, NULL, &arg_list, NULL) != B_OK)
-		return false;
+		return B_ERROR;
 
-	return true;
+	return B_OK;
 }
