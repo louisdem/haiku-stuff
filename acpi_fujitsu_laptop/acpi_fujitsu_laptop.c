@@ -386,9 +386,6 @@ static status_t fjl_hw_set_lcd_level(int level)
 	arg_list.count = 1;
 	arg_list.pointer = &arg0;
 
-	if (level >= acpi_fujitsu.max_brightness)
-		return B_ERROR;
-
 	dprintf("acpi_fujitsu_laptop: fjl_hw_set_lcd_level(level = %d"/*, path = %s*/")\n", level
 		/*,acpi_fujitsu.full_path*/);
 
