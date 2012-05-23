@@ -323,6 +323,7 @@ void c------------------------------() {}
 
 static const char *get_full_query(const char *dev, char *const what)
 {
+	// broken, panics on query from userland, won't fix
 	//strncpy(acpi_fujitsu.full_query.dev_name, dev, strlen(dev));
 	strcpy(acpi_fujitsu.full_query.what, what);
 
