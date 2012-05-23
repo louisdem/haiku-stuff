@@ -50,10 +50,13 @@ struct {
 		//const char *htk_dev_name;
 	} full_query;
 	unsigned int max_brightness;
+	status_t (*set_lcd_level)(int);
 } acpi_fujitsu;
 
+static const char *get_full_query(const char *, char *const);
 static int fjl_hw_get_max_brightness(void);
 static int fjl_hw_get_lcd_level(void);
+static status_t fjl_dumb_set_lcd_level(int);
 static status_t fjl_hw_set_lcd_level(int);
 
 //	#pragma mark -
@@ -128,7 +131,7 @@ acpi_fjl_control(void* _cookie, uint32 op, void* arg, size_t len)
 			return user_memcpy(arg, &level, sizeof(int));
 		}
 		case SET_BACKLIGHT_LEVEL: {
-			return fjl_hw_set_lcd_level(*(int*)arg);
+			return acpi_fujitsu.set_lcd_level(*(int*)arg);
 		}
 	}
 
@@ -212,6 +215,7 @@ static status_t
 acpi_fjl_init_driver(device_node *node, void **_driverCookie)
 {
 	char *prefix;
+	acpi_handle handle;
 	*_driverCookie = node;
 
 	TRACE("init_driver()\n");
@@ -224,10 +228,18 @@ acpi_fjl_init_driver(device_node *node, void **_driverCookie)
 
 	acpi_fujitsu.full_query.path = prefix;
 
+	if (acpi_fujitsu.acpi->get_handle(NULL, get_full_query(acpi_fujitsu.full_query.hid_dev_name,
+		"SBLL"), &handle) != B_OK) {
+		acpi_fujitsu.set_lcd_level = fjl_dumb_set_lcd_level;
+		TRACE("SBLL wasn't found\n");
+	}
+	else
+		acpi_fujitsu.set_lcd_level = fjl_hw_set_lcd_level;
+
 	if (fjl_hw_get_max_brightness() < 0)
 		return B_ERROR;
 	/*fjl_hw_get_lcd_level();
-	fjl_hw_set_lcd_level(4);
+	acpi_fujitsu.set_lcd_level(4);
 	fjl_hw_get_lcd_level();*/
 
 	//dprintf("acpi_fujitsu_laptop: HTK: %s\n", acpi_fujitsu.full_query.htk_dev_name);
@@ -375,9 +387,12 @@ static int fjl_hw_get_lcd_level(void)
 	return level;
 }
 
+static status_t fjl_dumb_set_lcd_level(int level)
+{
+	return B_ERROR;
+}
 static status_t fjl_hw_set_lcd_level(int level)
 {
-	acpi_handle handle = NULL;
 	acpi_object_type arg0;
 	acpi_objects arg_list;
 
@@ -389,14 +404,6 @@ static status_t fjl_hw_set_lcd_level(int level)
 	dprintf("acpi_fujitsu_laptop: fjl_hw_set_lcd_level(level = %d"/*, path = %s*/")\n", level
 		/*,acpi_fujitsu.full_path*/);
 
-	if (acpi_fujitsu.acpi->get_handle(NULL, get_full_query(acpi_fujitsu.full_query.hid_dev_name,
-		"SBLL"), &handle) != B_OK) {
-		TRACE("SBLL wasn't found\n");
-		return B_ERROR;
-	}
-
-	if (acpi_fujitsu.acpi->evaluate_method(handle, NULL, &arg_list, NULL) != B_OK)
-		return B_ERROR;
-
-	return B_OK;
+	return acpi_fujitsu.acpi->evaluate_method(NULL,
+		get_full_query(acpi_fujitsu.full_query.hid_dev_name, "SBLL"), &arg_list, NULL);
 }
