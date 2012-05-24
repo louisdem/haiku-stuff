@@ -4,12 +4,9 @@
 #error "They only support kernel mode ACPI. Sigh :("
 #endif
 
-#include <KernelExport.h>
-#include <Errors.h>
-#include <string.h>
-
-#include <stdio.h>
 #include <stdlib.h>
+#include <stdio.h>
+#include <string.h>
 
 #include <ACPI.h>
 #include "acpi_fujitsu_common.h"
@@ -53,10 +50,11 @@ struct {
 	status_t (*set_lcd_level)(int);
 } acpi_fujitsu;
 
-static const char *get_full_query(const char *, char *const);
+static const char *fjl_get_full_query(const char *, char *const);
 static int fjl_hw_get_max_brightness(void);
 static int fjl_hw_get_lcd_level(void);
-static status_t fjl_dumb_set_lcd_level(int);
+
+static status_t fjl_set_lcd_level_dumb(int);
 static status_t fjl_hw_set_lcd_level(int);
 
 //	#pragma mark -
@@ -228,9 +226,9 @@ acpi_fjl_init_driver(device_node *node, void **_driverCookie)
 
 	acpi_fujitsu.full_query.path = prefix;
 
-	if (acpi_fujitsu.acpi->get_handle(NULL, get_full_query(acpi_fujitsu.full_query.hid_dev_name,
+	if (acpi_fujitsu.acpi->get_handle(NULL, fjl_get_full_query(acpi_fujitsu.full_query.hid_dev_name,
 		"SBLL"), &handle) != B_OK) {
-		acpi_fujitsu.set_lcd_level = fjl_dumb_set_lcd_level;
+		acpi_fujitsu.set_lcd_level = fjl_set_lcd_level_dumb;
 		TRACE("SBLL wasn't found\n");
 	}
 	else
@@ -333,7 +331,7 @@ module_info *modules[] = {
 void c------------------------------() {}
 */
 
-static const char *get_full_query(const char *dev, char *const what)
+static const char *fjl_get_full_query(const char *dev, char *const what)
 {
 	// broken, panics on query from userland, won't fix
 	//strncpy(acpi_fujitsu.full_query.dev_name, dev, strlen(dev));
@@ -351,7 +349,7 @@ static int fjl_hw_get_max_brightness(void)
 	arg_data.length = sizeof(acpi_object_type);
 
 	if (acpi_fujitsu.acpi->evaluate_method(NULL,
-		get_full_query(acpi_fujitsu.full_query.hid_dev_name, "RBLL"), NULL, &arg_data) != B_OK
+		fjl_get_full_query(acpi_fujitsu.full_query.hid_dev_name, "RBLL"), NULL, &arg_data) != B_OK
 		|| arg0.object_type != ACPI_TYPE_INTEGER)
 		return -1;
 
@@ -373,7 +371,7 @@ static int fjl_hw_get_lcd_level(void)
 	arg_data.length = sizeof(acpi_object_type);
 
 	if (acpi_fujitsu.acpi->evaluate_method(NULL,
-		get_full_query(acpi_fujitsu.full_query.hid_dev_name, "GBLL"), NULL, &arg_data) != B_OK
+		fjl_get_full_query(acpi_fujitsu.full_query.hid_dev_name, "GBLL"), NULL, &arg_data) != B_OK
 		|| arg0.object_type != ACPI_TYPE_INTEGER) {
 			return -1;
 		}
@@ -387,7 +385,7 @@ static int fjl_hw_get_lcd_level(void)
 	return level;
 }
 
-static status_t fjl_dumb_set_lcd_level(int level)
+static status_t fjl_set_lcd_level_dumb(int level)
 {
 	return B_ERROR;
 }
@@ -405,5 +403,5 @@ static status_t fjl_hw_set_lcd_level(int level)
 		/*,acpi_fujitsu.full_path*/);
 
 	return acpi_fujitsu.acpi->evaluate_method(NULL,
-		get_full_query(acpi_fujitsu.full_query.hid_dev_name, "SBLL"), &arg_list, NULL);
+		fjl_get_full_query(acpi_fujitsu.full_query.hid_dev_name, "SBLL"), &arg_list, NULL);
 }
