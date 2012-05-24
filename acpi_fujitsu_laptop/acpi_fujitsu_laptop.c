@@ -10,6 +10,7 @@
 
 #include <ACPI.h>
 #include "acpi_fujitsu_common.h"
+#include <driver_settings.h>
 
 #define TRACE_FJL 1
 #ifdef TRACE_FJL
@@ -35,6 +36,10 @@ typedef struct acpi_ns_device_info {
 	acpi_device acpi_cookie;
 } acpi_fjl_device_info;
 
+typedef struct {
+	int backlight_level;
+} acpi_fujitsu_settings;
+
 /* bypass device/driver separation */
 struct {
 	acpi_module_info *acpi;
@@ -51,6 +56,7 @@ struct {
 } acpi_fujitsu;
 
 static const char *fjl_get_full_query(const char *, char *const);
+static status_t fjl_get_settings(acpi_fujitsu_settings *);
 static int fjl_hw_get_max_brightness(void);
 static int fjl_hw_get_lcd_level(void);
 
@@ -214,8 +220,9 @@ acpi_fjl_init_driver(device_node *node, void **_driverCookie)
 {
 	char *prefix;
 	acpi_handle handle;
-	*_driverCookie = node;
+	acpi_fujitsu_settings settings;
 
+	*_driverCookie = node;
 	TRACE("init_driver()\n");
 
 	/* path prefix, required cause of lack of cookie?! */
@@ -226,20 +233,29 @@ acpi_fjl_init_driver(device_node *node, void **_driverCookie)
 
 	acpi_fujitsu.full_query.path = prefix;
 
+	if (fjl_hw_get_max_brightness() < 0)
+		return B_ERROR;
+
 	if (acpi_fujitsu.acpi->get_handle(NULL, fjl_get_full_query(acpi_fujitsu.full_query.hid_dev_name,
 		"SBLL"), &handle) != B_OK) {
 		acpi_fujitsu.set_lcd_level = fjl_set_lcd_level_dumb;
 		TRACE("SBLL wasn't found\n");
 	}
-	else
+	else {
 		acpi_fujitsu.set_lcd_level = fjl_hw_set_lcd_level;
 
-	if (fjl_hw_get_max_brightness() < 0)
-		return B_ERROR;
-	/*fjl_hw_get_lcd_level();
-	acpi_fujitsu.set_lcd_level(4);
-	fjl_hw_get_lcd_level();*/
+		memset(&settings, 0, sizeof(acpi_fujitsu_settings));
+		/* load driver settings and set them */
+		if (fjl_get_settings(&settings) == B_OK) {
+			if (settings.backlight_level < 0 ||
+				settings.backlight_level >= acpi_fujitsu.max_brightness)
+				TRACE("backlight_level value is out the range supported by device\n");
+			else
+				acpi_fujitsu.set_lcd_level(settings.backlight_level);
+		}
+	}
 
+	/*fjl_hw_get_lcd_level();*/
 	//dprintf("acpi_fujitsu_laptop: HTK: %s\n", acpi_fujitsu.full_query.htk_dev_name);
 
 	return B_OK;
@@ -339,6 +355,21 @@ static const char *fjl_get_full_query(const char *dev, char *const what)
 
 	return acpi_fujitsu.full_query.path;
 }
+static status_t fjl_get_settings(acpi_fujitsu_settings *settings)
+{
+	void *handle;
+
+	if ((handle = load_driver_settings("acpi_fujitsu_laptop"))) {
+		const char *str = get_driver_parameter(handle, "backlight_level", NULL, NULL);
+		if (str)
+			settings->backlight_level = atoi(str);
+
+		unload_driver_settings(handle);
+		return B_OK;
+	}
+
+	return B_ERROR;
+}
 
 static int fjl_hw_get_max_brightness(void)
 {
@@ -358,7 +389,6 @@ static int fjl_hw_get_max_brightness(void)
 
 	return acpi_fujitsu.max_brightness = arg0.data.integer;
 }
-
 static int fjl_hw_get_lcd_level(void)
 {
 	unsigned int level;
@@ -372,9 +402,8 @@ static int fjl_hw_get_lcd_level(void)
 
 	if (acpi_fujitsu.acpi->evaluate_method(NULL,
 		fjl_get_full_query(acpi_fujitsu.full_query.hid_dev_name, "GBLL"), NULL, &arg_data) != B_OK
-		|| arg0.object_type != ACPI_TYPE_INTEGER) {
-			return -1;
-		}
+		|| arg0.object_type != ACPI_TYPE_INTEGER)
+		return -1;
 
 	level = arg0.data.integer & 0x0fffffff;
 	//brightness_changed = (arg0.data.integer & 0x80000000) ? true : false;
