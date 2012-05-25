@@ -1,0 +1,1 @@
+Simple driver for ACPI real mode on Fujitsu-Siemens laptops. Currently implemented feature is backlight control.
