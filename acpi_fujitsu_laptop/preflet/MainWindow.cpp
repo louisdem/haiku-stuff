@@ -13,7 +13,7 @@
 const uint32 kMsgChangeBacklightLevel = 'cblv';
 
 MainWindow::MainWindow()
-	: BWindow(BRect(0, 0, -1, -1), "FujitsuLaptop",
+	: BWindow(BRect(0, 0, 210, 110), "FujitsuLaptop",
 		B_TITLED_WINDOW, B_NOT_RESIZABLE | B_NOT_ZOOMABLE
 			| B_AUTO_UPDATE_SIZE_LIMITS | B_QUIT_ON_WINDOW_CLOSE)
 	, fBacklightBox(NULL)
@@ -36,18 +36,20 @@ MainWindow::MainWindow()
 			.AddGroup(B_HORIZONTAL, 0)
 				.AddGroup(B_VERTICAL, 0)
 					.Add(fBacklightSlider)
-					.SetInsets(5, 5, 5, 5)
-					.End()
 				.End()
-			.SetInsets(0, 0, 0, 0)
+				/*.AddGroup(B_VERTICAL, 0)
+					//
+				.End()*/
 			.End()
+			.SetInsets(5, 5, 5, 5)
+		.End()
 		.View();
 	fBacklightBox->AddChild(view);
 
 	BLayoutBuilder::Group<>(this)
 		.AddGrid(1, 1)
 			.Add(fBacklightBox, 0, 0)
-			.SetInsets(0, 0, 0, 0)
+			.SetInsets(5, 5, 5, 5)
 			.End()
 		.End();
 
