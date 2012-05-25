@@ -5,18 +5,16 @@
 #endif
 
 #include <stdlib.h>
-#include <stdio.h>
-#include <string.h>
 
 #include <ACPI.h>
 #include "acpi_fujitsu_common.h"
 #include <driver_settings.h>
 
-#define TRACE_FJL 1
+//#define TRACE_FJL 1
 #ifdef TRACE_FJL
-#       define TRACE(x) dprintf("acpi_fujitsu_laptop: "x)
+#       define TRACE(x...) dprintf("acpi_fujitsu_laptop: " x)
 #else
-#       define TRACE(x) ;
+#       define TRACE(x...) ;
 #endif
 
 #define ACPI_FJL_MODULE_NAME "drivers/power/acpi_fujitsu_laptop/driver_v1"
@@ -186,10 +184,11 @@ acpi_fjl_support(device_node *parent)
 		, &path, false) == B_OK
 			// parsing of string-valued HID is broken on Haiku, at least with my laptop :(
 			/*|| strcmp(hid, "FUJ02B1")*/) {
-		//dprintf("acpi_fujitsu_laptop: ACPI path: %s\n", path);
+		//TRACE("ACPI path: %s\n", path);
 
 		if ((acpi_fujitsu.full_query.hid_dev_name = strstr(path, "FJEX"))) { // backlight control
-			TRACE("Found supported device\n");
+			dprintf("acpi_fujitsu_laptop: Found supported device: %s\n",
+				acpi_fujitsu.full_query.hid_dev_name);
 
 			acpi_fujitsu.full_query.path = (char *) path;
 			return 0.6;
@@ -248,15 +247,15 @@ acpi_fjl_init_driver(device_node *node, void **_driverCookie)
 		/* load driver settings and set them */
 		if (fjl_get_settings(&settings) == B_OK) {
 			if (settings.backlight_level < 0 ||
-				settings.backlight_level >= acpi_fujitsu.max_brightness)
+				settings.backlight_level >= acpi_fujitsu.max_brightness) {
 				TRACE("backlight_level value is out the range supported by device\n");
-			else
+			} else
 				acpi_fujitsu.set_lcd_level(settings.backlight_level);
 		}
 	}
 
 	/*fjl_hw_get_lcd_level();*/
-	//dprintf("acpi_fujitsu_laptop: HTK: %s\n", acpi_fujitsu.full_query.htk_dev_name);
+	//TRACE("HTK: %s\n", acpi_fujitsu.full_query.htk_dev_name);
 
 	return B_OK;
 }
@@ -384,7 +383,7 @@ static int fjl_hw_get_max_brightness(void)
 		|| arg0.object_type != ACPI_TYPE_INTEGER)
 		return -1;
 
-	dprintf("acpi_fujitsu_laptop: fjl_hw_get_max_brightness() = %d\n",
+	TRACE("fjl_hw_get_max_brightness() = %d\n",
 		(int) arg0.data.integer);
 
 	return acpi_fujitsu.max_brightness = arg0.data.integer;
@@ -408,7 +407,7 @@ static int fjl_hw_get_lcd_level(void)
 	level = arg0.data.integer & 0x0fffffff;
 	//brightness_changed = (arg0.data.integer & 0x80000000) ? true : false;
 
-	dprintf("acpi_fujitsu_laptop: fjl_hw_get_lcd_level()"/* { brightness_changed = %d }*/" = %d\n",
+	TRACE("fjl_hw_get_lcd_level()"/* { brightness_changed = %d }*/" = %d\n",
 		/*brightness_changed,*/ level);
 
 	return level;
@@ -428,7 +427,7 @@ static status_t fjl_hw_set_lcd_level(int level)
 	arg_list.count = 1;
 	arg_list.pointer = &arg0;
 
-	dprintf("acpi_fujitsu_laptop: fjl_hw_set_lcd_level(level = %d"/*, path = %s*/")\n", level
+	TRACE("fjl_hw_set_lcd_level(level = %d"/*, path = %s*/")\n", level
 		/*,acpi_fujitsu.full_path*/);
 
 	return acpi_fujitsu.acpi->evaluate_method(NULL,

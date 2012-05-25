@@ -1,6 +1,9 @@
 #ifndef _ACPI_FUJITSU_P_H
 #define _ACPI_FUJITSU_P_H
 
+#include <stdio.h>
+#include <string.h>
+
 #include <Drivers.h>
 
 // io controls
