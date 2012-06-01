@@ -47,7 +47,7 @@
 +		if ((system_time() - start) > timeout) {
 +			break;
 +		}
-+		snooze(timeout / 4);
++		snooze(timeout);
 +	}
  
  	status = send_touchpad_arg(dev, 0x00);
