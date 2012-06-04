@@ -33,8 +33,6 @@ private:
 			BBox*				fBacklightBox;
 			BSlider*			fBacklightSlider;
 
-			BStringView*		fBluetoothState;
-
 			int					fDevice;
 };
 
