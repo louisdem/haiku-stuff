@@ -2,6 +2,7 @@
 
 #include <LayoutBuilder.h>
 #include "MainWindow.h"
+#include <Dragger.h>
 
 #include "acpi_fujitsu_common.h"
 
@@ -13,7 +14,7 @@
 const uint32 kMsgChangeBacklightLevel = 'cblv';
 
 MainWindow::MainWindow()
-	: BWindow(frame = BRect(0, 0, 210, 110), "FujitsuLaptop",
+	: BWindow(BRect(0, 0, 210, 110), "FujitsuLaptop",
 		B_TITLED_WINDOW, B_NOT_RESIZABLE | B_NOT_ZOOMABLE
 			| B_AUTO_UPDATE_SIZE_LIMITS | B_QUIT_ON_WINDOW_CLOSE)
 	, fBacklightBox(NULL)
@@ -30,12 +31,14 @@ MainWindow::MainWindow()
 	fBacklightSlider->SetLimitLabels("0", "7");
 	fBacklightSlider->SetEnabled(false);
 
+	/* TO-DO: create BView descendant and move this to it */
+	BRect frame;
+	frame.OffsetTo(B_ORIGIN);
 	frame.top = frame.bottom - 7.0f;
 	frame.left = frame.right - 7.0f;
-	//BDragger *dragger = new BDragger(frame, fBacklightSlider,
-		//B_FOLLOW_RIGHT /* handle overlaps right label, of course */);
 	// handle follows origin size of slider, for sure
-	//fBacklightSlider->AddChild(dragger);
+	//fBacklightSlider->AddChild(new BDragger(frame, fBacklightSlider,
+		//B_FOLLOW_RIGHT /* handle overlaps right label, of course */));
 
 	BView* view;
 	view = BLayoutBuilder::Group<>()

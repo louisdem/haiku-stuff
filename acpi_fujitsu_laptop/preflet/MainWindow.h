@@ -30,7 +30,6 @@ private:
 
 			acpi_fujitsu_laptop fStatus;
 
-			BRect				frame;
 			BBox*				fBacklightBox;
 			BSlider*			fBacklightSlider;
 
