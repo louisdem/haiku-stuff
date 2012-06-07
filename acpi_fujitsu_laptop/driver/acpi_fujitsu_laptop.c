@@ -171,12 +171,12 @@ acpi_fjl_support(device_node *parent)
 		return -1;
 
 	if (strcmp(bus, "acpi"))
-		return 0.0;
+		return 0.0f;
 
 	// check whether it's really a device
 	if (sDeviceManager->get_attr_uint32(parent, ACPI_DEVICE_TYPE_ITEM, &device_type, false) != B_OK
 		|| device_type != ACPI_TYPE_DEVICE) {
-		return 0.0;
+		return 0.0f;
 	}
 
 	// check whether it's our device
@@ -191,14 +191,14 @@ acpi_fjl_support(device_node *parent)
 				acpi_fujitsu.full_query.hid_dev_name);
 
 			acpi_fujitsu.full_query.path = (char *) path;
-			return 0.6;
+			return 0.8f;
 		}
 		/*else
 			acpi_fujitsu.full_query.htk_dev_name = strstr(path,
 				"FEXT"*/ /* aka FUJ02E3, hotkeys device */ /*);*/
 	}
 
-	return 0.0;
+	return 0.0f;
 }
 
 
