@@ -2,7 +2,7 @@
 
 #include <LayoutBuilder.h>
 #include "MainWindow.h"
-#include <Dragger.h>
+//#include <Dragger.h>
 
 #include "acpi_fujitsu_common.h"
 
@@ -32,13 +32,13 @@ MainWindow::MainWindow()
 	fBacklightSlider->SetEnabled(false);
 
 	/* TO-DO: create BView descendant and move this to it */
-	BRect frame;
+	/*BRect frame;
 	frame.OffsetTo(B_ORIGIN);
 	frame.top = frame.bottom - 7.0f;
 	frame.left = frame.right - 7.0f;
 	// handle follows origin size of slider, for sure
-	//fBacklightSlider->AddChild(new BDragger(frame, fBacklightSlider,
-		//B_FOLLOW_RIGHT /* handle overlaps right label, of course */));
+	fBacklightSlider->AddChild(new BDragger(frame, fBacklightSlider,
+		B_FOLLOW_RIGHT*/ /* handle overlaps right label, of course */ //));
 
 	BView* view;
 	view = BLayoutBuilder::Group<>()
