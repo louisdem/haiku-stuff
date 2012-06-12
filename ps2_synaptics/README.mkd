@@ -1,0 +1,4 @@
+Haiku's ps2_synaptics (part of ps2 bus manager) improvements and fixes
+======================================================================
+
+1. Improve touchpad detection. Try, if your PS2 Synaptics device never gets recognized as Synaptics touchpad.
