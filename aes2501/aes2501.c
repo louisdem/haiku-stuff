@@ -63,7 +63,7 @@ static input_aes_type *input_aes;
 static void aes_usb_transfer_callback(void *, status_t, void *, size_t);
 static status_t aes_setup_pipes(const usb_interface_info *);
 static status_t aes_usb_exec(bool, const pairs *, unsigned int);
-static status_t aes_usb_read(unsigned char* const, size_t);
+static status_t aes_usb_read(unsigned char *, size_t);
 static status_t aes_usb_read_regs(unsigned char *);
 
 //	#pragma mark -
@@ -410,7 +410,9 @@ input_aes_init_driver(device_node *node, void **_driverCookie)
 	)
 		return B_ERROR;
 
-	buf = malloc(126);
+	buf = malloc(126); //
+	if (!buf)
+		return B_ERROR;
 	if (aes_usb_read_regs(buf) != B_OK) {
 		free(buf);
 		return B_ERROR;
@@ -418,11 +420,8 @@ input_aes_init_driver(device_node *node, void **_driverCookie)
 	i = 0;
 	while (buf[0x5f] == 0x6b) {
 		TRACE("reg 0xaf = 0x%x\n", buf[0x5f]);
-		if (aes_usb_exec(true, cmd_3, G_N_ELEMENTS(cmd_3)) != B_OK) {
-			free(buf);
-			return B_ERROR;
-		}
-		if (aes_usb_read_regs(buf) != B_OK) {
+		if (aes_usb_exec(true, cmd_3, G_N_ELEMENTS(cmd_3)) != B_OK ||
+			aes_usb_read_regs(buf) != B_OK) {
 			free(buf);
 			return B_ERROR;
 		}
@@ -558,7 +557,7 @@ static void aes_usb_transfer_callback(void *cookie, status_t status, void *data,
 	};
 }
 
-static status_t aes_usb_read(unsigned char* const buf, size_t size)
+static status_t aes_usb_read(unsigned char *buf, size_t size)
 {
 	unsigned char *data;
 	size_t ret;
@@ -579,7 +578,6 @@ static status_t aes_usb_read(unsigned char* const buf, size_t size)
 
 	if ((ret = acquire_sem_etc(input_aes->lock, 1, B_RELATIVE_TIMEOUT,
 		400 * 1000)) < B_OK) {
-		input_aes_static.usb->cancel_queued_transfers(input_aes->device.pipe_in); //
 		if (!buf)
 			free(data);
 		return B_ERROR;
@@ -626,10 +624,8 @@ static status_t usb_write(const pairs *cmd, unsigned int num)
 
 	// block for consecutive transfers
 	if ((ret = acquire_sem_etc(input_aes->lock, 1, B_RELATIVE_TIMEOUT,
-		/* TO-DO: check limit */ 400 * 1000)) < B_OK /* time out */) {
-		input_aes_static.usb->
-			cancel_queued_transfers(input_aes->device.pipe_out); //
-
+		400 * 1000)) < B_OK /* time out */) {
+		/* TO-DO: cure from panic on time out */
 		if (ret == B_TIMED_OUT)
 			// on init consider critical, on operating just give up
 			return B_TIMED_OUT;
