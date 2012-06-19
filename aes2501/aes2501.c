@@ -43,8 +43,11 @@ typedef struct {
 		usb_pipe pipe_in,
 				 pipe_out;
 	} device;
+	struct {
+		status_t status;
+		size_t actual_length;
+	} transfer; // ! instead of passing cookie
 	sem_id lock;
-	status_t transfer_status;
 } input_aes_type;
 
 static struct {
@@ -65,6 +68,8 @@ static status_t aes_setup_pipes(const usb_interface_info *);
 static status_t aes_usb_exec(bool, const pairs *, unsigned int);
 static status_t aes_usb_read(unsigned char *, size_t);
 static status_t aes_usb_read_regs(unsigned char *);
+
+static void input_aes_uninit_driver(void *);
 
 //	#pragma mark -
 // device module API
@@ -378,23 +383,28 @@ input_aes_init_driver(device_node *node, void **_driverCookie)
 	*_driverCookie = node;
 	TRACE("init_driver()\n");
 
-	if (!(input_aes = (input_aes_type *) malloc(sizeof(input_aes_type))))
+	if (!(input_aes = (input_aes_type *) malloc(sizeof(input_aes_type)))) {
+		input_aes_uninit_driver(NULL);
 		return B_ERROR;
+	}
 
 	input_aes->lock = -1;
 
 	if (!(conf = input_aes_static.usb->get_nth_configuration(input_aes_static.device, 0))) {
 		TRACE("can't get default configuration\n");
+		input_aes_uninit_driver(NULL);
 		return B_ERROR;
 	}
 
 	if (input_aes_static.usb->set_configuration(input_aes_static.device, conf) != B_OK) {
 		TRACE("can't set configuration\n");
+		input_aes_uninit_driver(NULL);
 		return B_ERROR;
 	}
 
 	if (aes_setup_pipes(conf->interface[0].active) != B_OK) {
 		TRACE("can't setup pipes\n");
+		input_aes_uninit_driver(NULL);
 		return B_ERROR;
 	}
 
@@ -407,14 +417,19 @@ input_aes_init_driver(device_node *node, void **_driverCookie)
 		aes_usb_exec(true, cmd_1, G_N_ELEMENTS(cmd_1)) != B_OK ||
 		aes_usb_read(NULL, 20) != B_OK ||
 		aes_usb_exec(true, cmd_2, G_N_ELEMENTS(cmd_2)) != B_OK
-	)
+	) {
+		input_aes_uninit_driver(NULL);
 		return B_ERROR;
+	}
 
-	buf = malloc(126); //
-	if (!buf)
+	buf = malloc(126); // !
+	if (!buf) {
+		input_aes_uninit_driver(NULL);
 		return B_ERROR;
+	}
 	if (aes_usb_read_regs(buf) != B_OK) {
 		free(buf);
+		input_aes_uninit_driver(NULL);
 		return B_ERROR;
 	}
 	i = 0;
@@ -423,6 +438,7 @@ input_aes_init_driver(device_node *node, void **_driverCookie)
 		if (aes_usb_exec(true, cmd_3, G_N_ELEMENTS(cmd_3)) != B_OK ||
 			aes_usb_read_regs(buf) != B_OK) {
 			free(buf);
+			input_aes_uninit_driver(NULL);
 			return B_ERROR;
 		}
 		if (++i == 13)
@@ -430,8 +446,10 @@ input_aes_init_driver(device_node *node, void **_driverCookie)
 	}
 	free(buf);
 	if (aes_usb_exec(true, cmd_4, G_N_ELEMENTS(cmd_4)) != B_OK ||
-		aes_usb_exec(true, cmd_5, G_N_ELEMENTS(cmd_5)) != B_OK)
+		aes_usb_exec(true, cmd_5, G_N_ELEMENTS(cmd_5)) != B_OK) {
+		input_aes_uninit_driver(NULL);
 		return B_ERROR;
+	}
 
 	return B_OK;
 }
@@ -440,7 +458,7 @@ input_aes_init_driver(device_node *node, void **_driverCookie)
 static void
 input_aes_uninit_driver(void *driverCookie)
 {
-	TRACE("uninit_driver()\n");
+	//TRACE("uninit_driver()\n");
 
 	input_aes_static.usb->cancel_queued_transfers(input_aes->device.pipe_in);
 	input_aes_static.usb->cancel_queued_transfers(input_aes->device.pipe_out);
@@ -544,17 +562,19 @@ static status_t aes_setup_pipes(const usb_interface_info *uii)
 	return epts[0] >= 0 && epts[1] >= 0 ? B_OK : B_ENTRY_NOT_FOUND;
 }
 
-static void aes_usb_transfer_callback(void *cookie, status_t status, void *data, size_t len)
+static void aes_usb_transfer_callback(void *cookie, status_t status, void *data, size_t actlen)
 {
 	switch (status) {
 		case B_DEV_UNEXPECTED_PID:
 		case B_DEV_FIFO_OVERRUN:
 		case B_DEV_FIFO_UNDERRUN:
-			input_aes->transfer_status = B_BUSY;
+			input_aes->transfer.status = B_BUSY;
 			break;
 		default:
-			input_aes->transfer_status = status;
+			input_aes->transfer.status = status;
 	};
+
+	input_aes->transfer.actual_length = actlen;
 }
 
 static status_t aes_usb_read(unsigned char *buf, size_t size)
@@ -583,14 +603,18 @@ static status_t aes_usb_read(unsigned char *buf, size_t size)
 		return B_ERROR;
 	}
 	release_sem_etc(input_aes->lock, 1, 0);
-
-	if (input_aes->transfer_status == B_OK) {
-		if (!buf)
-			free(data);
-		return B_OK;
-	}
 	if (!buf)
 		free(data);
+
+	if (input_aes->transfer.status == B_OK) {
+		if (buf)
+			if (input_aes->transfer.actual_length != size) {
+				TRACE("request %lu bytes, but got %lu bytes.\n", size,
+					input_aes->transfer.actual_length);
+				return B_ERROR;
+			}
+		return B_OK;
+	}
 	return B_ERROR;
 }
 
@@ -624,7 +648,7 @@ static status_t usb_write(const pairs *cmd, unsigned int num)
 
 	// block for consecutive transfers
 	if ((ret = acquire_sem_etc(input_aes->lock, 1, B_RELATIVE_TIMEOUT,
-		400 * 1000)) < B_OK /* time out */) {
+		400 * 1000)) < B_OK /* timed out */) {
 		/* TO-DO: cure from panic on time out */
 		if (ret == B_TIMED_OUT)
 			// on init consider critical, on operating just give up
@@ -633,7 +657,7 @@ static status_t usb_write(const pairs *cmd, unsigned int num)
 	}
 	release_sem_etc(input_aes->lock, 1, 0);
 
-	if (input_aes->transfer_status == B_OK)
+	if (input_aes->transfer.status == B_OK)
 		return B_OK;
 	return B_ERROR;
 }
@@ -670,11 +694,13 @@ static status_t aes_usb_exec(bool strict, const pairs *cmd, unsigned int num)
 			else if (res == B_TIMED_OUT) {
 				if (strict)
 					return B_ERROR;
+				input_aes_static.usb->cancel_queued_transfers(input_aes->device.pipe_out);
 				break;
 			}
 			else if (res == B_BUSY) {
 				if (strict)
 					return B_ERROR;
+				input_aes_static.usb->cancel_queued_transfers(input_aes->device.pipe_out);
 			}
 			else return B_ERROR;
 		}
