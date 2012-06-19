@@ -44,10 +44,10 @@ typedef struct {
 				 pipe_out;
 	} device;
 	sem_id lock;
-	bool transfer_ok;
+	status_t transfer_status;
 } input_aes_type;
 
-struct {
+static struct {
 	usb_module_info *usb;
 	usb_device device;
 	bool matched;
@@ -55,16 +55,23 @@ struct {
 } input_aes_static;
 /* */
 
+typedef struct { uint8 reg, value; } pairs;
+
 static device_manager_info *sDeviceManager;
 static input_aes_type *input_aes;
 
-static void aes_usb_write_callback(void *, status_t, void *, size_t);
+static void aes_usb_transfer_callback(void *, status_t, void *, size_t);
 static status_t aes_setup_pipes(const usb_interface_info *);
+static status_t aes_usb_exec(bool, const pairs *, unsigned int);
+static status_t aes_usb_read_n_ignore(size_t);
 
 //	#pragma mark -
 // device module API
 
-typedef struct { uint8 reg, value; } pairs;
+#define G_N_ELEMENTS(arr) (sizeof(arr) / sizeof((arr)[0]))
+
+#define MAX_REGWRITES_PER_REQ 16
+#define MAX_RETRIES 1
 
 #define DEMODPHASE_NONE		0x00
 enum aes2501_regs {
@@ -75,6 +82,7 @@ enum aes2501_regs {
 #define AES2501_CTRL1_REG_UPDATE	(1<<2)
 	AES2501_REG_CTRL2 = 0x81,
 /* 1 = continuous scans, 0 = single scans */
+#define AES2501_CTRL2_READ_REGS		0x02 /* dump registers */
 #define AES2501_CTRL2_SET_ONE_SHOT	0x04
 	AES2501_REG_EXCITCTRL = 0x82, /* excitation control */
 	AES2501_REG_DETCTRL = 0x83, /* detect control */
@@ -281,8 +289,9 @@ static status_t
 input_aes_init_driver(device_node *node, void **_driverCookie)
 {
 	const usb_configuration_info *conf;
+	int i;
 
-	static const pairs cmd_1[] = {
+	const pairs cmd_1[] = {
 	{ AES2501_REG_CTRL1, AES2501_CTRL1_MASTER_RESET },
 	{ 0, 0 },
 	{ 0xb0, 0x27 }, /* Reserved? */
@@ -325,7 +334,7 @@ input_aes_init_driver(device_node *node, void **_driverCookie)
 	{ AES2501_REG_CTRL2, AES2501_CTRL2_SET_ONE_SHOT },
 	{ AES2501_REG_LPONT, AES2501_LPONT_MIN_VALUE },
 	};
-	static const pairs cmd_2[] = {
+	const pairs cmd_2[] = {
 	{ AES2501_REG_CTRL1, AES2501_CTRL1_MASTER_RESET },
 	{ AES2501_REG_EXCITCTRL, 0x40 },
 	{ AES2501_REG_CTRL1, AES2501_CTRL1_MASTER_RESET },
@@ -334,7 +343,7 @@ input_aes_init_driver(device_node *node, void **_driverCookie)
 	{ AES2501_REG_DETCTRL, 0x53 },
 	{ AES2501_REG_CTRL1, AES2501_CTRL1_REG_UPDATE },
 	};
-	static const pairs cmd_3[] = {
+	const pairs cmd_3[] = {
 	{ 0xff, 0x00 },
 	{ AES2501_REG_CTRL1, AES2501_CTRL1_MASTER_RESET },
 	{ AES2501_REG_AUTOCALOFFSET, 0x41 },
@@ -342,7 +351,7 @@ input_aes_init_driver(device_node *node, void **_driverCookie)
 	{ AES2501_REG_DETCTRL, 0x53 },
 	{ AES2501_REG_CTRL1, AES2501_CTRL1_REG_UPDATE },
 	};
-	static const pairs cmd_4[] = {
+	const pairs cmd_4[] = {
 	{ AES2501_REG_CTRL1, AES2501_CTRL1_MASTER_RESET },
 	{ AES2501_REG_EXCITCTRL, 0x40 },
 	{ 0xb0, 0x27 },
@@ -351,7 +360,7 @@ input_aes_init_driver(device_node *node, void **_driverCookie)
 	{ AES2501_REG_DETCTRL, 0x45 },
 	{ AES2501_REG_AUTOCALOFFSET, 0x41 },
 	};
-	static const pairs cmd_5[] = {
+	const pairs cmd_5[] = {
 	{ 0xb0, 0x27 },
 	{ AES2501_REG_CTRL1, AES2501_CTRL1_MASTER_RESET },
 	{ AES2501_REG_EXCITCTRL, 0x40 },
@@ -394,14 +403,30 @@ input_aes_init_driver(device_node *node, void **_driverCookie)
 	}
 
 	input_aes->lock = create_sem(0, "lock");
-	if (input_aes->lock < 0)
-		return B_ERROR;
-
-	input_aes->transfer_ok = false;
+	if (input_aes->lock < 0 ||
 
 	/* No time for installing windooze and doing rev. engineering of navigation op. mode,
 	 * so using fp scanner mode instead. I presume, the only inconvenience of that is slightly
 	 * increased power consumption. Forgive me for that */
+		aes_usb_exec(true, cmd_1, G_N_ELEMENTS(cmd_1)) != B_OK ||
+		aes_usb_read_n_ignore(20) != B_OK ||
+		aes_usb_exec(true, cmd_2, G_N_ELEMENTS(cmd_2)) != B_OK
+	)
+		return B_ERROR;
+
+	//read_regs(into buffer);
+	i = 0;
+	while (/*buffer[0x5f] == 0x6b)*/1) {
+		TRACE("reg 0xaf = 0x%x\n", /*buffer[0x5f]*/0x0);
+		if (aes_usb_exec(true, cmd_3, G_N_ELEMENTS(cmd_3)) != B_OK)
+			return B_ERROR;
+		//read_regs(into buffer);
+		if (++i == 13)
+			break;
+	}
+	if (aes_usb_exec(true, cmd_4, G_N_ELEMENTS(cmd_4)) != B_OK ||
+		aes_usb_exec(true, cmd_5, G_N_ELEMENTS(cmd_5)) != B_OK)
+		return B_ERROR;
 
 	return B_OK;
 }
@@ -514,17 +539,54 @@ static status_t aes_setup_pipes(const usb_interface_info *uii)
 	return epts[0] >= 0 && epts[1] >= 0 ? B_OK : B_ENTRY_NOT_FOUND;
 }
 
-static void aes_usb_write_callback(void *cookie, status_t status, void *data, size_t len)
+static void aes_usb_transfer_callback(void *cookie, status_t status, void *data, size_t len)
 {
-	if (status == B_OK)
-		input_aes->transfer_ok = true;
+	switch (status) {
+		case B_DEV_UNEXPECTED_PID:
+		case B_DEV_FIFO_OVERRUN:
+		case B_DEV_FIFO_UNDERRUN:
+			input_aes->transfer_status = B_BUSY;
+			break;
+		default:
+			input_aes->transfer_status = status;
+	};
 }
 
-static status_t usb_write(pairs *cmd, unsigned int num)
+static status_t aes_usb_read_n_ignore(size_t size)
+{
+	unsigned char data[size];
+	size_t ret;
+
+	if (input_aes_static.usb->queue_bulk(input_aes->device.pipe_in, data, size,
+		&aes_usb_transfer_callback, NULL) != B_OK)
+		return B_ERROR;
+
+	if ((ret = acquire_sem_etc(input_aes->lock, 1, B_RELATIVE_TIMEOUT,
+		400 * 1000)) < B_OK) {
+		input_aes_static.usb->cancel_queued_transfers(input_aes->device.pipe_in); //
+		return B_ERROR;
+	}
+	release_sem_etc(input_aes->lock, 1, 0);
+
+	if (input_aes->transfer_status == B_OK)
+		return B_OK;
+	return B_ERROR;
+}
+
+static status_t aes_usb_read_regs()
+{
+	const pairs regwrite[] = { { AES2501_REG_CTRL2, AES2501_CTRL2_READ_REGS } };
+
+	if (aes_usb_exec(true, regwrite, 1) != B_OK)
+		return B_ERROR;
+}
+
+static status_t usb_write(const pairs *cmd, unsigned int num)
 {
 	size_t size = num * 2;
-	unsigned char *data = malloc(size);
+	unsigned char data[size];
 	size_t offset = 0;
+	size_t ret;
 	int i;
 
 	for (i = 0; i < num; i++) {
@@ -533,27 +595,68 @@ static status_t usb_write(pairs *cmd, unsigned int num)
 	}
 
 	if (input_aes_static.usb->queue_bulk(input_aes->device.pipe_out, data, size,
-		&aes_usb_write_callback, NULL) != B_OK) {
-		free(data);
+		&aes_usb_transfer_callback, NULL) != B_OK)
+		return B_ERROR;
+
+	// block for consecutive transfers
+	if ((ret = acquire_sem_etc(input_aes->lock, 1, B_RELATIVE_TIMEOUT,
+		/* TO-DO: check limit */ 400 * 1000)) < B_OK /* time out */) {
+		input_aes_static.usb->
+			cancel_queued_transfers(input_aes->device.pipe_out); //
+
+		if (ret == B_TIMED_OUT)
+			// on init consider critical, on operating just give up
+			return B_TIMED_OUT;
 		return B_ERROR;
 	}
-	// block for consecutive transfers
-	if (acquire_sem_etc(input_aes->lock, 1, B_RELATIVE_TIMEOUT,
-		/* TO-DO: check limit */ 500 * 1000) < B_OK /* time out */) {
-		free(data);
-		// on init consider critical, on operating just give up
-		return B_TIMED_OUT;
-	}
+	release_sem_etc(input_aes->lock, 1, 0);
 
-	free(data);
-	if (input_aes->transfer_ok) {
-		input_aes->transfer_ok = false;
+	if (input_aes->transfer_status == B_OK)
 		return B_OK;
-	}
-
 	return B_ERROR;
 }
 
-static status_t aes_usb_exec(pairs *cmd, unsigned int num)
+static status_t aes_usb_exec(bool strict, const pairs *cmd, unsigned int num)
 {
+	unsigned int i;
+	int skip = 0, add_offset = 0;
+
+	for (i = 0; i < num; i += add_offset + skip) {
+		int limit = MIN(num, i + MAX_REGWRITES_PER_REQ), j;
+		status_t res;
+		skip = 0;
+
+		/* handle 0 reg, i.e. request separator */
+		if (!cmd[i].reg) {
+			skip = 1;
+			add_offset = 0;
+			continue;
+		}
+		for (j = i; i < limit; j++) // up to: limit || new separator
+			if (!cmd[j].reg) {
+				skip = 1;
+				break;
+			}
+		/* */
+
+		add_offset = j - i;
+		limit = strict ? 0 : MAX_RETRIES;
+		for (j = 0; j <= limit; j++) {
+			res = usb_write(&cmd[i], add_offset);
+			if (res == B_OK)
+				break;
+			else if (res == B_TIMED_OUT) {
+				if (strict)
+					return B_ERROR;
+				break;
+			}
+			else if (res == B_BUSY) {
+				if (strict)
+					return B_ERROR;
+			}
+			else return B_ERROR;
+		}
+	}
+
+	return B_OK;
 }
