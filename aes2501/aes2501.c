@@ -63,7 +63,8 @@ static input_aes_type *input_aes;
 static void aes_usb_transfer_callback(void *, status_t, void *, size_t);
 static status_t aes_setup_pipes(const usb_interface_info *);
 static status_t aes_usb_exec(bool, const pairs *, unsigned int);
-static status_t aes_usb_read_n_ignore(size_t);
+static status_t aes_usb_read(unsigned char* const, size_t);
+static status_t aes_usb_read_regs(unsigned char *);
 
 //	#pragma mark -
 // device module API
@@ -206,12 +207,6 @@ input_aes_write(void* cookie, off_t position, const void* buffer, size_t* num_by
 static status_t
 input_aes_control(void* _cookie, uint32 op, void* arg, size_t len)
 {
-	//input_aes_device_info* device = (input_aes_device_info*)_cookie;
-
-	/*switch (op) {
-		break;
-	}*/
-
 	return B_DEV_INVALID_IOCTL;
 }
 
@@ -290,6 +285,7 @@ input_aes_init_driver(device_node *node, void **_driverCookie)
 {
 	const usb_configuration_info *conf;
 	int i;
+	unsigned char *buf;
 
 	const pairs cmd_1[] = {
 	{ AES2501_REG_CTRL1, AES2501_CTRL1_MASTER_RESET },
@@ -324,7 +320,7 @@ input_aes_init_driver(device_node *node, void **_driverCookie)
 	{ AES2501_REG_ADREFLO, 0x34 },
 	{ AES2501_REG_STRTCOL, 0x16 },
 	{ AES2501_REG_ENDCOL, 0x16 },
-	{ 0xff, 0x00 }, //{ AES2501_REG_DATFMT, AES2501_DATFMT_BIN_IMG | 0x08 },
+	{ 0xff, 0x00 }, //{ /*AES2501_REG_DATFMT*/ 0x97, /*AES2501_DATFMT_BIN_IMG*/ 0x10 | 0x08 },
 	{ AES2501_REG_TREG1, 0x70 },
 	{ 0xa2, 0x02 },
 	{ 0xa7, 0x00 },
@@ -409,21 +405,31 @@ input_aes_init_driver(device_node *node, void **_driverCookie)
 	 * so using fp scanner mode instead. I presume, the only inconvenience of that is slightly
 	 * increased power consumption. Forgive me for that */
 		aes_usb_exec(true, cmd_1, G_N_ELEMENTS(cmd_1)) != B_OK ||
-		aes_usb_read_n_ignore(20) != B_OK ||
+		aes_usb_read(NULL, 20) != B_OK ||
 		aes_usb_exec(true, cmd_2, G_N_ELEMENTS(cmd_2)) != B_OK
 	)
 		return B_ERROR;
 
-	//read_regs(into buffer);
+	buf = malloc(126);
+	if (aes_usb_read_regs(buf) != B_OK) {
+		free(buf);
+		return B_ERROR;
+	}
 	i = 0;
-	while (/*buffer[0x5f] == 0x6b)*/1) {
-		TRACE("reg 0xaf = 0x%x\n", /*buffer[0x5f]*/0x0);
-		if (aes_usb_exec(true, cmd_3, G_N_ELEMENTS(cmd_3)) != B_OK)
+	while (buf[0x5f] == 0x6b) {
+		TRACE("reg 0xaf = 0x%x\n", buf[0x5f]);
+		if (aes_usb_exec(true, cmd_3, G_N_ELEMENTS(cmd_3)) != B_OK) {
+			free(buf);
 			return B_ERROR;
-		//read_regs(into buffer);
+		}
+		if (aes_usb_read_regs(buf) != B_OK) {
+			free(buf);
+			return B_ERROR;
+		}
 		if (++i == 13)
 			break;
 	}
+	free(buf);
 	if (aes_usb_exec(true, cmd_4, G_N_ELEMENTS(cmd_4)) != B_OK ||
 		aes_usb_exec(true, cmd_5, G_N_ELEMENTS(cmd_5)) != B_OK)
 		return B_ERROR;
@@ -552,33 +558,53 @@ static void aes_usb_transfer_callback(void *cookie, status_t status, void *data,
 	};
 }
 
-static status_t aes_usb_read_n_ignore(size_t size)
+static status_t aes_usb_read(unsigned char* const buf, size_t size)
 {
-	unsigned char data[size];
+	unsigned char *data;
 	size_t ret;
 
-	if (input_aes_static.usb->queue_bulk(input_aes->device.pipe_in, data, size,
-		&aes_usb_transfer_callback, NULL) != B_OK)
+	if (buf)
+		data = buf;
+	else
+		data = malloc(size);
+
+	if (!data)
 		return B_ERROR;
+	if (input_aes_static.usb->queue_bulk(input_aes->device.pipe_in, data, size,
+		&aes_usb_transfer_callback, NULL) != B_OK) {
+		if (!buf)
+			free(data);
+		return B_ERROR;
+	}
 
 	if ((ret = acquire_sem_etc(input_aes->lock, 1, B_RELATIVE_TIMEOUT,
 		400 * 1000)) < B_OK) {
 		input_aes_static.usb->cancel_queued_transfers(input_aes->device.pipe_in); //
+		if (!buf)
+			free(data);
 		return B_ERROR;
 	}
 	release_sem_etc(input_aes->lock, 1, 0);
 
-	if (input_aes->transfer_status == B_OK)
+	if (input_aes->transfer_status == B_OK) {
+		if (!buf)
+			free(data);
 		return B_OK;
+	}
+	if (!buf)
+		free(data);
 	return B_ERROR;
 }
 
-static status_t aes_usb_read_regs()
+static status_t aes_usb_read_regs(unsigned char *buf)
 {
 	const pairs regwrite[] = { { AES2501_REG_CTRL2, AES2501_CTRL2_READ_REGS } };
 
-	if (aes_usb_exec(true, regwrite, 1) != B_OK)
+	if (aes_usb_exec(true, regwrite, 1) != B_OK ||
+		aes_usb_read(buf, 126) != B_OK)
 		return B_ERROR;
+
+	return B_OK;
 }
 
 static status_t usb_write(const pairs *cmd, unsigned int num)
@@ -632,7 +658,7 @@ static status_t aes_usb_exec(bool strict, const pairs *cmd, unsigned int num)
 			add_offset = 0;
 			continue;
 		}
-		for (j = i; i < limit; j++) // up to: limit || new separator
+		for (j = i; j < limit; j++) // up to: limit || new separator
 			if (!cmd[j].reg) {
 				skip = 1;
 				break;
