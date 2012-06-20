@@ -464,8 +464,7 @@ input_aes_uninit_driver(void *driverCookie)
 	input_aes_static.usb->cancel_queued_transfers(input_aes->device.pipe_out);
 
 	if (input_aes) {
-		if (input_aes->lock >= 0)
-			delete_sem(input_aes->lock);
+		delete_sem(input_aes->lock);
 		free(input_aes);
 	}
 	input_aes_static.usb->uninstall_notify("usb_aes2501");
@@ -566,8 +565,11 @@ static void aes_usb_transfer_callback(void *cookie, status_t status, void *data,
 {
 	switch (status) {
 		case B_DEV_UNEXPECTED_PID:
-		case B_DEV_FIFO_OVERRUN:
 		case B_DEV_FIFO_UNDERRUN:
+			/*input_aes->transfer.status = B_BUSY;
+			break;*/
+		case B_DEV_FIFO_OVERRUN:
+			//TRACE("data overrun\n");
 			input_aes->transfer.status = B_BUSY;
 			break;
 		default:
@@ -575,6 +577,8 @@ static void aes_usb_transfer_callback(void *cookie, status_t status, void *data,
 	};
 
 	input_aes->transfer.actual_length = actlen;
+
+	release_sem_etc(input_aes->lock, 1, 0);
 }
 
 static status_t aes_usb_read(unsigned char *buf, size_t size)
@@ -586,9 +590,9 @@ static status_t aes_usb_read(unsigned char *buf, size_t size)
 		data = buf;
 	else
 		data = malloc(size);
-
 	if (!data)
 		return B_ERROR;
+
 	if (input_aes_static.usb->queue_bulk(input_aes->device.pipe_in, data, size,
 		&aes_usb_transfer_callback, NULL) != B_OK) {
 		if (!buf)
@@ -602,7 +606,6 @@ static status_t aes_usb_read(unsigned char *buf, size_t size)
 			free(data);
 		return B_ERROR;
 	}
-	release_sem_etc(input_aes->lock, 1, 0);
 	if (!buf)
 		free(data);
 
@@ -615,6 +618,7 @@ static status_t aes_usb_read(unsigned char *buf, size_t size)
 			}
 		return B_OK;
 	}
+
 	return B_ERROR;
 }
 
@@ -649,16 +653,15 @@ static status_t usb_write(const pairs *cmd, unsigned int num)
 	// block for consecutive transfers
 	if ((ret = acquire_sem_etc(input_aes->lock, 1, B_RELATIVE_TIMEOUT,
 		400 * 1000)) < B_OK /* timed out */) {
-		/* TO-DO: cure from panic on time out */
 		if (ret == B_TIMED_OUT)
 			// on init consider critical, on operating just give up
 			return B_TIMED_OUT;
 		return B_ERROR;
 	}
-	release_sem_etc(input_aes->lock, 1, 0);
 
 	if (input_aes->transfer.status == B_OK)
 		return B_OK;
+
 	return B_ERROR;
 }
 
@@ -694,13 +697,20 @@ static status_t aes_usb_exec(bool strict, const pairs *cmd, unsigned int num)
 			else if (res == B_TIMED_OUT) {
 				if (strict)
 					return B_ERROR;
-				input_aes_static.usb->cancel_queued_transfers(input_aes->device.pipe_out);
 				break;
 			}
 			else if (res == B_BUSY) {
 				if (strict)
 					return B_ERROR;
-				input_aes_static.usb->cancel_queued_transfers(input_aes->device.pipe_out);
+				continue;
+			}
+			else if (res == B_DEV_STALLED) {
+				if (strict)
+					return B_ERROR;
+				if(input_aes_static.usb->
+					clear_feature(input_aes->device.pipe_out, USB_FEATURE_ENDPOINT_HALT)
+					!= B_OK)
+					break;
 			}
 			else return B_ERROR;
 		}
