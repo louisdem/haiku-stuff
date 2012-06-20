@@ -7,7 +7,6 @@
 #include <ACPI.h> // temp
 
 #include <USB3.h>
-#include <driver_settings.h>
 
 #define TRACE_AES 1
 #ifdef TRACE_AES
@@ -410,10 +409,6 @@ input_aes_init_driver(device_node *node, void **_driverCookie)
 
 	input_aes->lock = create_sem(0, "lock");
 	if (input_aes->lock < 0 ||
-
-	/* No time for installing windooze and doing rev. engineering of navigation op. mode,
-	 * so using fp scanner mode instead. I presume, the only inconvenience of that is slightly
-	 * increased power consumption. Forgive me for that */
 		aes_usb_exec(true, cmd_1, G_N_ELEMENTS(cmd_1)) != B_OK ||
 		aes_usb_read(NULL, 20) != B_OK ||
 		aes_usb_exec(true, cmd_2, G_N_ELEMENTS(cmd_2)) != B_OK
@@ -432,6 +427,7 @@ input_aes_init_driver(device_node *node, void **_driverCookie)
 		input_aes_uninit_driver(NULL);
 		return B_ERROR;
 	}
+
 	i = 0;
 	while (buf[0x5f] == 0x6b) {
 		TRACE("reg 0xaf = 0x%x\n", buf[0x5f]);
