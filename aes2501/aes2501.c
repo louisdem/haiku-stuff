@@ -635,11 +635,9 @@ static status_t aes_usb_read_regs(unsigned char *buf)
 
 static status_t usb_write(const pairs *cmd, unsigned int num)
 {
-	size_t size = num * 2;
+	size_t size = num * 2, offset = 0, ret;
 	unsigned char data[size];
-	size_t offset = 0;
-	size_t ret;
-	int i;
+	unsigned int i;
 
 	for (i = 0; i < num; i++) {
 		data[offset++] = cmd[i].reg;
@@ -661,7 +659,6 @@ static status_t usb_write(const pairs *cmd, unsigned int num)
 
 	if (input_aes->transfer.status == B_OK)
 		return B_OK;
-
 	return B_ERROR;
 }
 
