@@ -4,8 +4,7 @@
 #include <string.h>
 #include <stdlib.h>
 
-#include <ACPI.h> // temp
-
+#include <device_manager.h>
 #include <USB3.h>
 
 #define TRACE_AES 1
@@ -25,7 +24,7 @@
 #define INPUT_AES_PATHID_GENERATOR "aes2501/path_id"
 
 
-/* Missing things: serialisation on acquire/release */
+/* Missing things: serialisation on device obtain/release */
 
 
 /* usb module isn't ready for the new driver API :( */
@@ -65,7 +64,7 @@ static input_aes_type *input_aes;
 static void aes_usb_transfer_callback(void *, status_t, void *, size_t);
 static status_t aes_setup_pipes(const usb_interface_info *);
 static status_t aes_usb_exec(bool, const pairs *, unsigned int);
-static status_t aes_usb_read(unsigned char *, size_t);
+static status_t aes_usb_read(unsigned char* const, size_t);
 static status_t aes_usb_read_regs(unsigned char *);
 
 static void input_aes_uninit_driver(void *);
@@ -161,8 +160,7 @@ input_aes_init_device(void *_cookie, void **cookie)
 	input_aes_device_info *device;
 	device_node *parent;
 
-	device = (input_aes_device_info *)calloc(1, sizeof(*device));
-	if (device == NULL)
+	if (!(device = (input_aes_device_info *)calloc(1, sizeof(*device))))
 		return B_NO_MEMORY;
 
 	device->node = node;
@@ -239,12 +237,9 @@ input_aes_support(device_node *parent)
 	bigtime_t timeout = 5000000
 	/* 9000000 // overrated much, measured on busy-wait */, start;
 
-	path_id = sDeviceManager->create_id(INPUT_AES_PATHID_GENERATOR);
 	// limit to single driver instance
-	if (path_id != 0) {
-		if (path_id < 0)
-			TRACE("support(): couldn't create a path_id\n");
-		else
+	if ((path_id = sDeviceManager->create_id(INPUT_AES_PATHID_GENERATOR)) != 0) {
+		path_id < 0 ? TRACE("support(): couldn't create a path_id\n") :
 			sDeviceManager->free_id(INPUT_AES_PATHID_GENERATOR, path_id);
 
 		return 0.0f;
@@ -407,8 +402,7 @@ input_aes_init_driver(device_node *node, void **_driverCookie)
 		return B_ERROR;
 	}
 
-	input_aes->lock = create_sem(0, "lock");
-	if (input_aes->lock < 0 ||
+	if ((input_aes->lock = create_sem(0, "lock")) < 0 ||
 		aes_usb_exec(true, cmd_1, G_N_ELEMENTS(cmd_1)) != B_OK ||
 		aes_usb_read(NULL, 20) != B_OK ||
 		aes_usb_exec(true, cmd_2, G_N_ELEMENTS(cmd_2)) != B_OK
@@ -417,8 +411,7 @@ input_aes_init_driver(device_node *node, void **_driverCookie)
 		return B_ERROR;
 	}
 
-	buf = malloc(126); // !
-	if (!buf) {
+	if (!(buf = malloc(126))) { // !
 		input_aes_uninit_driver(NULL);
 		return B_ERROR;
 	}
@@ -538,8 +531,7 @@ void c------------------------------() {}
 
 static status_t aes_setup_pipes(const usb_interface_info *uii)
 {
-	size_t epts[] = { -1, -1 };
-	size_t ep = 0;
+	size_t epts[] = { -1, -1 }, ep = 0;
 
 	for (; ep < uii->endpoint_count; ep++) {
 		usb_endpoint_descriptor *ed = uii->endpoint[ep].descr;
@@ -571,22 +563,17 @@ static void aes_usb_transfer_callback(void *cookie, status_t status, void *data,
 		default:
 			input_aes->transfer.status = status;
 	};
-
 	input_aes->transfer.actual_length = actlen;
 
 	release_sem_etc(input_aes->lock, 1, 0);
 }
 
-static status_t aes_usb_read(unsigned char *buf, size_t size)
+static status_t aes_usb_read(unsigned char* const buf, size_t size)
 {
 	unsigned char *data;
 	size_t ret;
 
-	if (buf)
-		data = buf;
-	else
-		data = malloc(size);
-	if (!data)
+	if (!(data = buf ? buf : malloc(size)))
 		return B_ERROR;
 
 	if (input_aes_static.usb->queue_bulk(input_aes->device.pipe_in, data, size,
@@ -646,7 +633,7 @@ static status_t usb_write(const pairs *cmd, unsigned int num)
 
 	// block for consecutive transfers
 	if ((ret = acquire_sem_etc(input_aes->lock, 1, B_RELATIVE_TIMEOUT,
-		400 * 1000)) < B_OK /* timed out */) {
+		400 * 1000)) < B_OK) {
 		if (ret == B_TIMED_OUT)
 			// on init consider critical, on operating just give up
 			return B_TIMED_OUT;
@@ -666,8 +653,8 @@ static status_t aes_usb_exec(bool strict, const pairs *cmd, unsigned int num)
 	for (i = 0; i < num; i += add_offset + skip) {
 		int limit = MIN(num, i + MAX_REGWRITES_PER_REQ), j;
 		status_t res;
-		skip = 0;
 
+		skip = 0;
 		/* handle 0 reg, i.e. request separator */
 		if (!cmd[i].reg) {
 			skip = 1;
@@ -684,8 +671,7 @@ static status_t aes_usb_exec(bool strict, const pairs *cmd, unsigned int num)
 		add_offset = j - i;
 		limit = strict ? 0 : MAX_RETRIES;
 		for (j = 0; j <= limit; j++) {
-			res = usb_write(&cmd[i], add_offset);
-			if (res == B_OK)
+			if ((res = usb_write(&cmd[i], add_offset)) == B_OK)
 				break;
 			else if (res == B_TIMED_OUT) {
 				if (strict)
