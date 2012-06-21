@@ -74,6 +74,7 @@ static void input_aes_uninit_driver(void *);
 
 #define G_N_ELEMENTS(arr) (sizeof(arr) / sizeof((arr)[0]))
 
+#define BULK_TIMEOUT 2000
 #define MAX_REGWRITES_PER_REQ 16
 #define MAX_RETRIES 1
 
@@ -209,7 +210,7 @@ input_aes_write(void* cookie, off_t position, const void* buffer, size_t* num_by
 static status_t
 input_aes_control(void* _cookie, uint32 op, void* arg, size_t len)
 {
-	return B_DEV_INVALID_IOCTL;
+	return B_ERROR;
 }
 
 
@@ -583,8 +584,7 @@ static status_t aes_usb_read(unsigned char* const buf, size_t size)
 		return B_ERROR;
 	}
 
-	if ((ret = acquire_sem_etc(input_aes->lock, 1, B_RELATIVE_TIMEOUT,
-		400 * 1000)) < B_OK) {
+	if ((ret = acquire_sem_etc(input_aes->lock, 1, B_RELATIVE_TIMEOUT, BULK_TIMEOUT)) < B_OK) {
 		if (!buf)
 			free(data);
 		return B_ERROR;
@@ -632,8 +632,7 @@ static status_t usb_write(const pairs *cmd, unsigned int num)
 		return B_ERROR;
 
 	// block for consecutive transfers
-	if ((ret = acquire_sem_etc(input_aes->lock, 1, B_RELATIVE_TIMEOUT,
-		400 * 1000)) < B_OK) {
+	if ((ret = acquire_sem_etc(input_aes->lock, 1, B_RELATIVE_TIMEOUT, BULK_TIMEOUT)) < B_OK) {
 		if (ret == B_TIMED_OUT)
 			// on init consider critical, on operating just give up
 			return B_TIMED_OUT;
