@@ -1,5 +1,7 @@
 /* Written by Artem Falcon <lomka@gero.in> */
 
+/* Dumb driver which does init */
+
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -405,7 +407,7 @@ input_aes_init_driver(device_node *node, void **_driverCookie)
 
 	if ((input_aes->lock = create_sem(0, "lock")) < 0 ||
 		aes_usb_exec(true, cmd_1, G_N_ELEMENTS(cmd_1)) != B_OK ||
-		aes_usb_read(NULL, 20) != B_OK ||
+		//aes_usb_read(NULL, 20) != B_OK ||
 		aes_usb_exec(true, cmd_2, G_N_ELEMENTS(cmd_2)) != B_OK
 	) {
 		input_aes_uninit_driver(NULL);
@@ -422,6 +424,7 @@ input_aes_init_driver(device_node *node, void **_driverCookie)
 		return B_ERROR;
 	}
 
+	TRACE("reg 0xaf = 0x%x\n", buf[0x5f]);
 	i = 0;
 	while (buf[0x5f] == 0x6b) {
 		TRACE("reg 0xaf = 0x%x\n", buf[0x5f]);
@@ -593,12 +596,11 @@ static status_t aes_usb_read(unsigned char* const buf, size_t size)
 		free(data);
 
 	if (input_aes->transfer.status == B_OK) {
-		if (buf)
-			if (input_aes->transfer.actual_length != size) {
+		if (buf && input_aes->transfer.actual_length != size) {
 				TRACE("request %lu bytes, but got %lu bytes.\n", size,
 					input_aes->transfer.actual_length);
 				return B_ERROR;
-			}
+		}
 		return B_OK;
 	}
 
@@ -677,7 +679,7 @@ static status_t aes_usb_exec(bool strict, const pairs *cmd, unsigned int num)
 					return B_ERROR;
 				break;
 			}
-			else if (res == B_BUSY) {
+			else if (res == B_BUSY || res == B_DEV_FIFO_OVERRUN) {
 				if (strict)
 					return B_ERROR;
 				continue;
