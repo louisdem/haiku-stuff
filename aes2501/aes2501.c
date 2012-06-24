@@ -679,7 +679,7 @@ static status_t aes_usb_exec(bool strict, const pairs *cmd, unsigned int num)
 					return B_ERROR;
 				break;
 			}
-			else if (res == B_BUSY || res == B_DEV_FIFO_OVERRUN) {
+			else if (res == B_BUSY) {
 				if (strict)
 					return B_ERROR;
 				continue;
