@@ -41,7 +41,7 @@ typedef struct {
 typedef struct {
 	struct {
 		usb_pipe pipe_in,
-				 pipe_out;
+			 pipe_out;
 	} device;
 	struct {
 		status_t status;
@@ -120,7 +120,7 @@ enum aes2501_settling_delay {
 enum aes2501_rates {
 	/* rate of detection cycles: */
 	AES2501_DETCTRL_DRATE_CONTINUOUS 	= 0x00, /* continuously */
-	AES2501_DETCTRL_DRATE_31_MS			= 0x02, /* every 31.24ms */
+	AES2501_DETCTRL_DRATE_31_MS		= 0x02, /* every 31.24ms */
 
     AES2501_COLSCAN_SRATE_128_US	= 0x02,	/* 128us */
 };
@@ -611,11 +611,10 @@ static status_t aes_usb_read_regs(unsigned char *buf)
 {
 	const pairs regwrite[] = { { AES2501_REG_CTRL2, AES2501_CTRL2_READ_REGS } };
 
-	if (aes_usb_exec(true, regwrite, 1) != B_OK ||
-		aes_usb_read(buf, 126) != B_OK)
+	if (aes_usb_exec(true, regwrite, 1) != B_OK)
 		return B_ERROR;
 
-	return B_OK;
+	return aes_usb_read(buf, 126);
 }
 
 static status_t usb_write(const pairs *cmd, unsigned int num)
