@@ -557,11 +557,11 @@ static void aes_usb_transfer_callback(void *cookie, status_t status, void *data,
 {
 	switch (status) {
 		case B_DEV_UNEXPECTED_PID:
-		case B_DEV_FIFO_OVERRUN:
 			input_aes->transfer.status = B_BUSY;
 			break;
 		case B_DEV_FIFO_UNDERRUN:
 			//TRACE("data underrun\n");
+		case B_DEV_FIFO_OVERRUN:
 		default:
 			input_aes->transfer.status = status;
 	};
@@ -601,9 +601,14 @@ static status_t aes_usb_read(unsigned char* const buf, size_t size)
 		}
 		return B_OK;
 	}
+	if (!buf) {
+		if (input_aes->transfer.status == B_DEV_FIFO_UNDERRUN)
+			return B_OK;
+		if (input_aes->transfer.status == B_DEV_FIFO_OVERRUN)
+			dprintf("aes2501: data overrun. please bump aes_usb_read(NULL, [value] by some");
+	}
 
-	return !buf && input_aes->transfer.status == B_DEV_FIFO_UNDERRUN ? B_OK :
-	B_ERROR;
+	return B_ERROR;
 }
 
 static status_t aes_usb_read_regs(unsigned char *buf)
@@ -677,7 +682,8 @@ static status_t aes_usb_exec(bool strict, const pairs *cmd, unsigned int num)
 					return B_ERROR;
 				break;
 			}
-			else if (res == B_BUSY || B_DEV_FIFO_UNDERRUN) {
+			else if (res == B_BUSY || B_DEV_FIFO_UNDERRUN
+								   || B_DEV_FIFO_OVERRUN) {
 				if (strict)
 					return B_ERROR;
 				continue;
