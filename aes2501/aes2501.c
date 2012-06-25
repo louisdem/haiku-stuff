@@ -9,7 +9,7 @@
 #include <device_manager.h>
 #include <USB3.h>
 
-#define TRACE_AES 1
+//#define TRACE_AES 1
 #ifdef TRACE_AES
 #       define TRACE(x...) dprintf("aes2501: " x)
 #else
@@ -242,7 +242,10 @@ input_aes_support(device_node *parent)
 
 	// limit to single driver instance
 	if ((path_id = sDeviceManager->create_id(INPUT_AES_PATHID_GENERATOR)) != 0) {
-		path_id < 0 ? TRACE("support(): couldn't create a path_id\n") :
+		if (path_id < 0) {
+			TRACE("support(): couldn't create a path_id\n");
+		}
+		else
 			sDeviceManager->free_id(INPUT_AES_PATHID_GENERATOR, path_id);
 
 		return 0.0f;
@@ -415,7 +418,7 @@ input_aes_init_driver(device_node *node, void **_driverCookie)
 	}
 
 	if (!(buf =
-#if 1
+#if 0
 	calloc(126, 1)
 #else
 	malloc(126) // !
@@ -443,7 +446,7 @@ input_aes_init_driver(device_node *node, void **_driverCookie)
 		if (++i == 13)
 			break;
 	}
-#if 1
+#if 0
 	TRACE("reg vals:\n");
 	for (i = 0; i < 126; i++)
 		if (buf[i])
