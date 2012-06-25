@@ -407,7 +407,7 @@ input_aes_init_driver(device_node *node, void **_driverCookie)
 
 	if ((input_aes->lock = create_sem(0, "lock")) < 0 ||
 		aes_usb_exec(true, cmd_1, G_N_ELEMENTS(cmd_1)) != B_OK ||
-		//aes_usb_read(NULL, 20) != B_OK ||
+		aes_usb_read(NULL, 44 /*20*/) != B_OK || // !
 		aes_usb_exec(true, cmd_2, G_N_ELEMENTS(cmd_2)) != B_OK
 	) {
 		input_aes_uninit_driver(NULL);
@@ -557,13 +557,11 @@ static void aes_usb_transfer_callback(void *cookie, status_t status, void *data,
 {
 	switch (status) {
 		case B_DEV_UNEXPECTED_PID:
-		case B_DEV_FIFO_UNDERRUN:
-			/*input_aes->transfer.status = B_BUSY;
-			break;*/
 		case B_DEV_FIFO_OVERRUN:
-			//TRACE("data overrun\n");
 			input_aes->transfer.status = B_BUSY;
 			break;
+		case B_DEV_FIFO_UNDERRUN:
+			//TRACE("data underrun\n");
 		default:
 			input_aes->transfer.status = status;
 	};
@@ -577,7 +575,7 @@ static status_t aes_usb_read(unsigned char* const buf, size_t size)
 	unsigned char *data;
 	size_t ret;
 
-	if (!(data = buf ? buf : malloc(size)))
+	if (!(data = (buf ? buf : malloc(size)) ))
 		return B_ERROR;
 
 	if (input_aes_static.usb->queue_bulk(input_aes->device.pipe_in, data, size,
@@ -604,7 +602,8 @@ static status_t aes_usb_read(unsigned char* const buf, size_t size)
 		return B_OK;
 	}
 
-	return B_ERROR;
+	return !buf && input_aes->transfer.status == B_DEV_FIFO_UNDERRUN ? B_OK :
+	B_ERROR;
 }
 
 static status_t aes_usb_read_regs(unsigned char *buf)
@@ -678,7 +677,7 @@ static status_t aes_usb_exec(bool strict, const pairs *cmd, unsigned int num)
 					return B_ERROR;
 				break;
 			}
-			else if (res == B_BUSY) {
+			else if (res == B_BUSY || B_DEV_FIFO_UNDERRUN) {
 				if (strict)
 					return B_ERROR;
 				continue;
