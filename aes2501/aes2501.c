@@ -485,7 +485,10 @@ input_aes_register_child_devices(void *_cookie)
 	TRACE("register_child_devices()\n");
 
 	snprintf(name, sizeof(name), INPUT_AES_BASENAME, input_aes_static.path_id);
-	return sDeviceManager->publish_device(node, name, INPUT_AES_DEVICE_MODULE_NAME);
+	sDeviceManager->publish_device(node, name, INPUT_AES_DEVICE_MODULE_NAME);
+
+	dprintf("input_aes_device_removed() is not implemented, nothing more to do, unloading\n");
+	return B_ERROR;
 }
 
 
