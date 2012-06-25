@@ -414,7 +414,13 @@ input_aes_init_driver(device_node *node, void **_driverCookie)
 		return B_ERROR;
 	}
 
-	if (!(buf = malloc(126))) { // !
+	if (!(buf =
+#if 1
+	calloc(126, 1)
+#else
+	malloc(126) // !
+#endif
+	)) {
 		input_aes_uninit_driver(NULL);
 		return B_ERROR;
 	}
@@ -689,7 +695,7 @@ static status_t aes_usb_exec(bool strict, const pairs *cmd, unsigned int num)
 				break;
 			}
 			else if (res == B_BUSY || B_DEV_FIFO_UNDERRUN
-					       || B_DEV_FIFO_OVERRUN) {
+								   || B_DEV_FIFO_OVERRUN) {
 				if (strict)
 					return B_ERROR;
 				continue;
