@@ -437,6 +437,12 @@ input_aes_init_driver(device_node *node, void **_driverCookie)
 		if (++i == 13)
 			break;
 	}
+#if 1
+	TRACE("reg vals:\n");
+	for (i = 0; i < 126; i++)
+		if (buf[i])
+			dprintf("0x%x = 0x%x, ", i, buf[i]);
+#endif
 	free(buf);
 	if (aes_usb_exec(true, cmd_4, G_N_ELEMENTS(cmd_4)) != B_OK ||
 		aes_usb_exec(true, cmd_5, G_N_ELEMENTS(cmd_5)) != B_OK) {
@@ -683,7 +689,7 @@ static status_t aes_usb_exec(bool strict, const pairs *cmd, unsigned int num)
 				break;
 			}
 			else if (res == B_BUSY || B_DEV_FIFO_UNDERRUN
-					       || B_DEV_FIFO_OVERRUN) {
+								   || B_DEV_FIFO_OVERRUN) {
 				if (strict)
 					return B_ERROR;
 				continue;
