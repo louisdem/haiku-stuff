@@ -4,8 +4,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include <SupportDefs.h>
-
 #define AES_VID 0x08ff
 #define AES_PID 0x2500
 
