@@ -3,10 +3,13 @@
 
 #include "aes2501_common.h"
 
-#include <Entry.h>
-#include <driver_settings.h>
 #include <add-ons/input_server/InputServerDevice.h>
 #include <USBKit.h>
+
+#include <Entry.h>
+#include <driver_settings.h>
+
+#include <SupportDefs.h>
 
 #define PRINT_AES 1
 #ifdef PRINT_AES

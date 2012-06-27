@@ -4,6 +4,9 @@ SubDir HAIKU_TOP src add-ons input_server devices aes2501 ;
 UsePrivateHeaders input ;
 UseHeaders [ FDirName $(HAIKU_TOP) src add-ons kernel drivers input aes2501 common ] ;
 
+
+SubDirC++Flags --no-warnings ;
+
 Addon <input>aes2501 :
 	AesInputDevice.cpp
-	: be input_server libdevice.so $(TARGET_LIBSUPC++) ;
+	: be input_server libdevice.so libaes2501.so $(TARGET_LIBSUPC++) ;
