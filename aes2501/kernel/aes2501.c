@@ -2,9 +2,9 @@
 
 /* Dumb driver which does init */
 
-#include <stdio.h>
+#include "common/aes2501_common.h"
+
 #include <string.h>
-#include <stdlib.h>
 
 #include <device_manager.h>
 #include <USB3.h>
@@ -137,7 +137,7 @@ enum aes2501_sensor_gain {
 };
 
 static const usb_support_descriptor kSupportedDevices[] = {
-	{0,0,0,0x08ff,0x2500}
+	{0,0,0,AES_VID,AES_PID}
 };
 
 static status_t
@@ -490,7 +490,8 @@ input_aes_register_child_devices(void *_cookie)
 	snprintf(name, sizeof(name), INPUT_AES_BASENAME, input_aes_static.path_id);
 	sDeviceManager->publish_device(node, name, INPUT_AES_DEVICE_MODULE_NAME);
 
-	dprintf("input_aes_device_removed() is not implemented, nothing more to do, unloading\n");
+	dprintf("input_aes_device_removed() is not implemented, no need to stay resident,"
+		" unloading\n");
 	return B_ERROR;
 }
 
