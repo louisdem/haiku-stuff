@@ -33,6 +33,25 @@ AesInputDevice::InitCheck()
 		(void *) this };
 	input_device_ref *deviceList[] = { &device, NULL };
 
+	const pairs start_scan_cmd[] = {
+	{ 0xb0, 0x27 },
+	{ AES2501_REG_CTRL1, AES2501_CTRL1_MASTER_RESET },
+	{ AES2501_REG_EXCITCTRL, 0x40 },
+	{ 0xff, 0x00 },
+	{ AES2501_REG_CTRL1, AES2501_CTRL1_MASTER_RESET },
+	{ AES2501_REG_EXCITCTRL, 0x40 },
+	{ AES2501_REG_CTRL1, AES2501_CTRL1_MASTER_RESET },
+	{ AES2501_REG_EXCITCTRL, 0x40 },
+	{ AES2501_REG_CTRL1, AES2501_CTRL1_MASTER_RESET },
+	{ AES2501_REG_EXCITCTRL, 0x40 },
+	{ AES2501_REG_CTRL1, AES2501_CTRL1_MASTER_RESET },
+	{ AES2501_REG_EXCITCTRL, 0x40 },
+	{ AES2501_REG_CTRL1, AES2501_CTRL1_MASTER_RESET },
+	{ AES2501_REG_EXCITCTRL, 0x40 },
+	{ AES2501_REG_CTRL1, AES2501_CTRL1_SCAN_RESET },
+	{ AES2501_REG_CTRL1, AES2501_CTRL1_SCAN_RESET },
+	};
+
 	// (f)open would be poor choice
 	if (!entry.Exists()) {
 		PRINT("Kernel-side driver didn't make device init for us\n");

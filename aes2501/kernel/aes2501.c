@@ -58,8 +58,6 @@ static struct {
 } input_aes_static;
 /* */
 
-typedef struct { uint8 reg, value; } pairs;
-
 static device_manager_info *sDeviceManager;
 static input_aes_type *input_aes;
 
@@ -82,16 +80,12 @@ static void input_aes_uninit_driver(void *);
 
 #define DEMODPHASE_NONE		0x00
 enum aes2501_regs {
-	AES2501_REG_CTRL1 = 0x80,
-#define AES2501_CTRL1_MASTER_RESET	(1<<0)
-#define AES2501_CTRL1_SCAN_RESET	(1<<1) /* stop + restart scan sequencer */
 /* 1 = continuously updated, 0 = updated prior to starting a scan */
 #define AES2501_CTRL1_REG_UPDATE	(1<<2)
 	AES2501_REG_CTRL2 = 0x81,
 /* 1 = continuous scans, 0 = single scans */
 #define AES2501_CTRL2_READ_REGS		0x02 /* dump registers */
 #define AES2501_CTRL2_SET_ONE_SHOT	0x04
-	AES2501_REG_EXCITCTRL = 0x82, /* excitation control */
 	AES2501_REG_DETCTRL = 0x83, /* detect control */
 	AES2501_REG_COLSCAN = 0x88, /* column scan rate register */
 	AES2501_REG_MEASDRV = 0x89, /* measure drive */
@@ -361,24 +355,6 @@ input_aes_init_driver(device_node *node, void **_driverCookie)
 	{ AES2501_REG_DETCTRL, 0x45 },
 	{ AES2501_REG_AUTOCALOFFSET, 0x41 },
 	};
-	const pairs cmd_5[] = {
-	{ 0xb0, 0x27 },
-	{ AES2501_REG_CTRL1, AES2501_CTRL1_MASTER_RESET },
-	{ AES2501_REG_EXCITCTRL, 0x40 },
-	{ 0xff, 0x00 },
-	{ AES2501_REG_CTRL1, AES2501_CTRL1_MASTER_RESET },
-	{ AES2501_REG_EXCITCTRL, 0x40 },
-	{ AES2501_REG_CTRL1, AES2501_CTRL1_MASTER_RESET },
-	{ AES2501_REG_EXCITCTRL, 0x40 },
-	{ AES2501_REG_CTRL1, AES2501_CTRL1_MASTER_RESET },
-	{ AES2501_REG_EXCITCTRL, 0x40 },
-	{ AES2501_REG_CTRL1, AES2501_CTRL1_MASTER_RESET },
-	{ AES2501_REG_EXCITCTRL, 0x40 },
-	{ AES2501_REG_CTRL1, AES2501_CTRL1_MASTER_RESET },
-	{ AES2501_REG_EXCITCTRL, 0x40 },
-	{ AES2501_REG_CTRL1, AES2501_CTRL1_SCAN_RESET },
-	{ AES2501_REG_CTRL1, AES2501_CTRL1_SCAN_RESET },
-	};
 
 	*_driverCookie = node;
 	TRACE("init_driver()\n");
@@ -453,8 +429,7 @@ input_aes_init_driver(device_node *node, void **_driverCookie)
 			dprintf("0x%x = 0x%x, ", i, buf[i]);
 #endif
 	free(buf);
-	if (aes_usb_exec(true, cmd_4, G_N_ELEMENTS(cmd_4)) != B_OK ||
-		aes_usb_exec(true, cmd_5, G_N_ELEMENTS(cmd_5)) != B_OK) {
+	if (aes_usb_exec(true, cmd_4, G_N_ELEMENTS(cmd_4)) != B_OK) {
 		input_aes_uninit_driver(NULL);
 		return B_ERROR;
 	}

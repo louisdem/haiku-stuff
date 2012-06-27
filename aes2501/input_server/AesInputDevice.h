@@ -5,7 +5,6 @@
 
 #include <Entry.h>
 #include <driver_settings.h>
-
 #include <add-ons/input_server/InputServerDevice.h>
 #include <USBKit.h>
 
@@ -45,7 +44,9 @@ class AesInputDevice: public BInputServerDevice {
 public:
 	AesInputDevice();
 	virtual ~AesInputDevice();
+private:
 	void _ReadSettings();
+public:
 	/* BInputServerDevice */
 	virtual status_t InitCheck();
 	virtual status_t Start(const char*, void*);
