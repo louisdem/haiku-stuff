@@ -78,56 +78,15 @@ static void input_aes_uninit_driver(void *);
 #define MAX_REGWRITES_PER_REQ 16
 #define MAX_RETRIES 1
 
-#define DEMODPHASE_NONE		0x00
 enum aes2501_regs {
-/* 1 = continuously updated, 0 = updated prior to starting a scan */
-#define AES2501_CTRL1_REG_UPDATE	(1<<2)
-	AES2501_REG_CTRL2 = 0x81,
 /* 1 = continuous scans, 0 = single scans */
 #define AES2501_CTRL2_READ_REGS		0x02 /* dump registers */
-#define AES2501_CTRL2_SET_ONE_SHOT	0x04
-	AES2501_REG_DETCTRL = 0x83, /* detect control */
-	AES2501_REG_COLSCAN = 0x88, /* column scan rate register */
-	AES2501_REG_MEASDRV = 0x89, /* measure drive */
-	AES2501_REG_MEASFREQ = 0x8a, /* measure frequency */
-	AES2501_REG_DEMODPHASE1 = 0x8d,
-	AES2501_REG_DEMODPHASE2 = 0x8c,
-	AES2501_REG_CHANGAIN = 0x8e, /* channel gain */
-	AES2501_REG_ADREFHI = 0x91, /* A/D reference high */
-	AES2501_REG_ADREFLO = 0x92, /* A/D reference low */
 	AES2501_REG_ENDROW = 0x94, /* end row */
-	AES2501_REG_STRTCOL = 0x95, /* start column */
-	AES2501_REG_ENDCOL = 0x96, /* end column */
-	AES2501_REG_DATFMT = 0x97, /* data format */
-	AES2501_REG_TREG1 = 0xa1, /* test register 1 */
 	AES2501_REG_AUTOCALOFFSET = 0xa8,
-	AES2501_REG_TREGC = 0xac,
-/* Enable the reading of the register in TREGD */
-#define AES2501_TREGC_ENABLE	0x01
-	AES2501_REG_TREGD = 0xad,
-	AES2501_REG_LPONT = 0xb4, /* low power oscillator on time */
-#define AES2501_LPONT_MIN_VALUE 0x00	/* 0 ms */
-};
-enum aes2501_settling_delay {
-	AES2501_DETCTRL_SDELAY_31_MS	= 0x00,	/* 31.25ms */
 };
 enum aes2501_rates {
 	/* rate of detection cycles: */
-	AES2501_DETCTRL_DRATE_CONTINUOUS 	= 0x00, /* continuously */
 	AES2501_DETCTRL_DRATE_31_MS		= 0x02, /* every 31.24ms */
-
-    AES2501_COLSCAN_SRATE_128_US	= 0x02,	/* 128us */
-};
-enum aes2501_mesure {
-/* 0 = use mesure drive setting, 1 = when sine wave is selected */
-#define AES2501_MEASDRV_MEASURE_SQUARE	0x10
-	AES2501_MEASDRV_MDRIVE_0_325	= 0x00,	/* 0.325 Vpp */
-
-	AES2501_MEASFREQ_2M		= 0x05	/* 2 MHz */
-};
-enum aes2501_sensor_gain {
-	AES2501_CHANGAIN_STAGE1_16X	= 0x03,	/* 16x */
-	AES2501_CHANGAIN_STAGE2_4X	= 0x10,	/* 4x */
 };
 
 static const usb_support_descriptor kSupportedDevices[] = {
@@ -465,7 +424,7 @@ input_aes_register_child_devices(void *_cookie)
 	snprintf(name, sizeof(name), INPUT_AES_BASENAME, input_aes_static.path_id);
 	sDeviceManager->publish_device(node, name, INPUT_AES_DEVICE_MODULE_NAME);
 
-	dprintf("input_aes_device_removed() is not implemented, no need to stay resident,"
+	dprintf("aes2501: input_aes_device_removed() is not implemented, no need to stay resident,"
 		" unloading\n");
 	return B_ERROR;
 }
@@ -623,7 +582,7 @@ static status_t usb_write(const pairs *cmd, unsigned int num)
 
 	for (i = 0; i < num; i++) {
 		data[offset++] = cmd[i].reg;
-		data[offset++] = cmd[i].value;
+		data[offset++] = cmd[i].val;
 	}
 
 	if (input_aes_static.usb->queue_bulk(input_aes->device.pipe_out, data, size,
