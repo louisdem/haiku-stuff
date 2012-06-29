@@ -18,6 +18,8 @@
 
 #define INPUT_AES_MODULE_NAME "drivers/input/aes2501/driver_v1"
 #define INPUT_AES_DEVICE_MODULE_NAME "drivers/input/aes2501/device_v1"
+
+/* Base Namespace devices are published to */
 #define INPUT_AES_BASENAME "input/aes2501/%d"
 
 // name of pnp generator of path ids
