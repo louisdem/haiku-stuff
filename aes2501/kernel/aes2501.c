@@ -2,7 +2,7 @@
 
 /* Dumb driver which does init */
 
-#include "common/aes2501_common.h"
+#include "aes2501_common.h"
 
 #include <string.h>
 
@@ -18,8 +18,6 @@
 
 #define INPUT_AES_MODULE_NAME "drivers/input/aes2501/driver_v1"
 #define INPUT_AES_DEVICE_MODULE_NAME "drivers/input/aes2501/device_v1"
-
-/* Base Namespace devices are published to */
 #define INPUT_AES_BASENAME "input/aes2501/%d"
 
 // name of pnp generator of path ids
@@ -63,11 +61,16 @@ static input_aes_type *input_aes;
 
 static void aes_usb_transfer_callback(void *, status_t, void *, size_t);
 static status_t aes_setup_pipes(const usb_interface_info *);
-static status_t aes_usb_exec(bool, const pairs *, unsigned int);
 static status_t aes_usb_read(unsigned char* const, size_t);
 static status_t aes_usb_read_regs(unsigned char *);
 
+static status_t usb_write(const pairs *, unsigned int);
+static status_t clear_stall(void);
+
 static void input_aes_uninit_driver(void *);
+
+extern status_t aes_usb_exec(status_t (*usb_write)(), status_t (*clear_stall)(),
+	bool strict, const pairs *cmd, unsigned int num);
 
 //	#pragma mark -
 // device module API
@@ -75,8 +78,6 @@ static void input_aes_uninit_driver(void *);
 #define G_N_ELEMENTS(arr) (sizeof(arr) / sizeof((arr)[0]))
 
 #define BULK_TIMEOUT 2000
-#define MAX_REGWRITES_PER_REQ 16
-#define MAX_RETRIES 1
 
 enum aes2501_regs {
 /* 1 = continuous scans, 0 = single scans */
@@ -344,9 +345,9 @@ input_aes_init_driver(device_node *node, void **_driverCookie)
 	}
 
 	if ((input_aes->lock = create_sem(0, "lock")) < 0 ||
-		aes_usb_exec(true, cmd_1, G_N_ELEMENTS(cmd_1)) != B_OK ||
+		aes_usb_exec(&usb_write, &clear_stall, true, cmd_1, G_N_ELEMENTS(cmd_1)) != B_OK ||
 		aes_usb_read(NULL, 44 /*20*/) != B_OK || // !
-		aes_usb_exec(true, cmd_2, G_N_ELEMENTS(cmd_2)) != B_OK
+		aes_usb_exec(&usb_write, &clear_stall, true, cmd_2, G_N_ELEMENTS(cmd_2)) != B_OK
 	) {
 		input_aes_uninit_driver(NULL);
 		return B_ERROR;
@@ -372,7 +373,7 @@ input_aes_init_driver(device_node *node, void **_driverCookie)
 	i = 0;
 	while (buf[0x5f] == 0x6b) {
 		TRACE("reg 0xaf = 0x%x\n", buf[0x5f]);
-		if (aes_usb_exec(true, cmd_3, G_N_ELEMENTS(cmd_3)) != B_OK ||
+		if (aes_usb_exec(&usb_write, &clear_stall, true, cmd_3, G_N_ELEMENTS(cmd_3)) != B_OK ||
 			aes_usb_read_regs(buf) != B_OK) {
 			free(buf);
 			input_aes_uninit_driver(NULL);
@@ -388,7 +389,7 @@ input_aes_init_driver(device_node *node, void **_driverCookie)
 			dprintf("0x%x = 0x%x, ", i, buf[i]);
 #endif
 	free(buf);
-	if (aes_usb_exec(true, cmd_4, G_N_ELEMENTS(cmd_4)) != B_OK) {
+	if (aes_usb_exec(&usb_write, &clear_stall, true, cmd_4, G_N_ELEMENTS(cmd_4)) != B_OK) {
 		input_aes_uninit_driver(NULL);
 		return B_ERROR;
 	}
@@ -568,12 +569,13 @@ static status_t aes_usb_read_regs(unsigned char *buf)
 {
 	const pairs regwrite[] = { { AES2501_REG_CTRL2, AES2501_CTRL2_READ_REGS } };
 
-	if (aes_usb_exec(true, regwrite, 1) != B_OK)
+	if (aes_usb_exec(&usb_write, &clear_stall, true, regwrite, 1) != B_OK)
 		return B_ERROR;
 
 	return aes_usb_read(buf, 126);
 }
 
+/* Callbacks */
 static status_t usb_write(const pairs *cmd, unsigned int num)
 {
 	size_t size = num * 2, offset = 0, ret;
@@ -601,57 +603,8 @@ static status_t usb_write(const pairs *cmd, unsigned int num)
 		return B_OK;
 	return B_ERROR;
 }
-
-static status_t aes_usb_exec(bool strict, const pairs *cmd, unsigned int num)
+static status_t clear_stall(void)
 {
-	unsigned int i;
-	int skip = 0, add_offset = 0;
-
-	for (i = 0; i < num; i += add_offset + skip) {
-		int limit = MIN(num, i + MAX_REGWRITES_PER_REQ), j;
-		status_t res;
-
-		skip = 0;
-		/* handle 0 reg, i.e. request separator */
-		if (!cmd[i].reg) {
-			skip = 1;
-			add_offset = 0;
-			continue;
-		}
-		for (j = i; j < limit; j++) // up to: limit || new separator
-			if (!cmd[j].reg) {
-				skip = 1;
-				break;
-			}
-		/* */
-
-		add_offset = j - i;
-		limit = strict ? 0 : MAX_RETRIES;
-		for (j = 0; j <= limit; j++) {
-			if ((res = usb_write(&cmd[i], add_offset)) == B_OK)
-				break;
-			else if (res == B_TIMED_OUT) {
-				if (strict)
-					return B_ERROR;
-				break;
-			}
-			else if (res == B_BUSY || B_DEV_FIFO_UNDERRUN
-								   || B_DEV_FIFO_OVERRUN) {
-				if (strict)
-					return B_ERROR;
-				continue;
-			}
-			else if (res == B_DEV_STALLED) {
-				if (strict)
-					return B_ERROR;
-				if(input_aes_static.usb->
-					clear_feature(input_aes->device.pipe_out, USB_FEATURE_ENDPOINT_HALT)
-					!= B_OK)
-					break;
-			}
-			else return B_ERROR;
-		}
-	}
-
-	return B_OK;
+	return input_aes_static.usb->clear_feature(input_aes->device.pipe_out, USB_FEATURE_ENDPOINT_HALT);
 }
+/* */

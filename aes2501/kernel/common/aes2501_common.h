@@ -4,10 +4,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#include "aes2501_lib.h"
+
 #define AES_VID 0x08ff
 #define AES_PID 0x2500
-
-typedef struct { int reg, val; } pairs;
 
 #define DEMODPHASE_NONE		0x00
 enum aes2501_regs_common {

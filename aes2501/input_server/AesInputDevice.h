@@ -9,8 +9,6 @@
 #include <Entry.h>
 #include <driver_settings.h>
 
-#include <SupportDefs.h>
-
 #define PRINT_AES 1
 #ifdef PRINT_AES
 	inline void _iprint(const char* fmt, ...) {

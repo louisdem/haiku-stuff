@@ -2,6 +2,7 @@ SubDir HAIKU_TOP src add-ons kernel drivers input aes2501 ;
 
 
 UsePublicHeaders kernel ;
+UseHeaders [ FDirName $(HAIKU_TOP) src add-ons kernel drivers input aes2501 common ] ;
 
 KernelAddon aes2501 :
 	aes2501.c
