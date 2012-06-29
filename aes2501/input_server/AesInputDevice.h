@@ -22,9 +22,9 @@
 		fflush(log);
 		fclose(log);
        }
-#	define PRINT(x)	_iprint(x)
+#	define PRINT(x...)	_iprint (x)
 #else
-#	define PRINT(x) ;
+#	define PRINT(x...) ;
 #endif
 
 extern "C" _EXPORT BInputServerDevice* instantiate_input_device();
@@ -43,12 +43,17 @@ class AesInputDevice: public BInputServerDevice {
 	class AesUSBRoster *URoster;
 
 	BUSBDevice *device;
+	struct {
+		BUSBEndpoint *pipe_in,
+					 *pipe_out;
+	} dev_data;
 	AesSettings *settings;
 public:
 	AesInputDevice();
 	virtual ~AesInputDevice();
 private:
 	void _ReadSettings();
+	status_t aes_setup_pipes(const BUSBInterface *);
 public:
 	/* BInputServerDevice */
 	virtual status_t InitCheck();

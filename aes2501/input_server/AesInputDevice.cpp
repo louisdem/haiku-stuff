@@ -28,10 +28,11 @@ status_t
 AesInputDevice::InitCheck()
 {
 	BEntry entry(kAesInputDirectory);
+	const BUSBConfiguration *conf;
 	bigtime_t timeout = 1000, start;
-	input_device_ref device = { "AuthenTec AES2501 USB", B_POINTING_DEVICE,
+	input_device_ref dev = { "AuthenTec AES2501 USB", B_POINTING_DEVICE,
 		(void *) this };
-	input_device_ref *deviceList[] = { &device, NULL };
+	input_device_ref *deviceList[] = { &dev, NULL };
 
 	const pairs start_scan_cmd[] = {
 	{ 0xb0, 0x27 },
@@ -59,6 +60,11 @@ AesInputDevice::InitCheck()
 	}
 
 	this->URoster = new AesUSBRoster();
+
+	/* dupe: We're doing a duplicate of what kernel driver did in it's init phase,
+	   because of two reasons: 1) someone may wish to adopt this project for
+	   hot swapping support, 2) i don't want to mess with creating of shared memory
+	   area region and passing parms from kernel driver to userspace one */
 	URoster->Start();
 
 	// as always :-!
@@ -71,6 +77,16 @@ AesInputDevice::InitCheck()
 		}
 		snooze(timeout);
 	}
+
+	if (this->device->SetConfiguration(conf = device->ConfigurationAt(0)) < B_OK) {
+		PRINT("can't set configuration\n");
+		return B_ERROR;
+	}
+	if (aes_setup_pipes(conf->InterfaceAt(0)) != B_OK) {
+		PRINT("can't setup pipes\n");
+		return B_ERROR;
+	}
+	// end of dupe
 
 	if (!(this->settings = (AesSettings *) malloc(sizeof(AesSettings))))
 		return B_ERROR;
@@ -125,4 +141,23 @@ void AesInputDevice::_ReadSettings()
 	settings->handle_click = get_driver_boolean_parameter(handle, "handle_click", true, true);
 	settings->handle_scroll = get_driver_boolean_parameter(handle, "handle_scroll", true, true);
 	unload_driver_settings(handle);
+}
+
+status_t AesInputDevice::aes_setup_pipes(const BUSBInterface *uii)
+{
+	size_t ep = 0;
+	BUSBEndpoint *epts[] = { NULL, NULL };
+
+	for (; ep < uii->CountEndpoints(); ep++) {
+		BUSBEndpoint *ed = (BUSBEndpoint *) uii->EndpointAt(ep);
+		if (ed->IsBulk())
+			(ed->IsInput()) ? (epts[0] = ed) : (epts[1] = ed);
+	}
+
+	this->dev_data.pipe_in = epts[0];
+	dev_data.pipe_out = epts[1];
+
+	PRINT("endpoint is: %d %d\n", dev_data.pipe_in->Index(), dev_data.pipe_out->Index());
+
+	return epts[0] && epts[1] ? B_OK : B_ENTRY_NOT_FOUND;
 }
