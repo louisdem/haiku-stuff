@@ -1,11 +1,14 @@
-SubDir HAIKU_TOP src add-ons kernel drivers input aes2501 ;
+ProjectDir = HAIKU_TOP src add-ons kernel drivers input aes2501 ;
+CommonDir = $(ProjectDir) common ;
 
+
+SubDir $(ProjectDir) ;
 
 UsePublicHeaders kernel ;
-UseHeaders [ FDirName $(HAIKU_TOP) src add-ons kernel drivers input aes2501 common ] ;
+UseHeaders $(CommonDir) ;
 
 KernelAddon aes2501 :
 	aes2501.c
-	: libaes2501.so ;
+	: aes2501.a ;
 
-SubInclude HAIKU_TOP src add-ons kernel drivers input aes2501 common ;
+SubInclude $(CommonDir) ;

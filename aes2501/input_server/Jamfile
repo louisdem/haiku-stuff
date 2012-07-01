@@ -9,4 +9,4 @@ SubDirC++Flags --no-warnings ;
 
 Addon <input>aes2501 :
 	AesInputDevice.cpp
-	: be input_server libdevice.so libaes2501.so $(TARGET_LIBSUPC++) ;
+	: be input_server device $(TARGET_LIBSUPC++) libfpaes.so ;

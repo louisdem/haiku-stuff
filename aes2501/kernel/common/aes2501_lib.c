@@ -1,5 +1,7 @@
 /* Written by Artem Falcon <lomka@gero.in> */
 
+/* Early stage of libfpaes */
+
 #include "aes2501_lib.h"
 
 #include <sys/param.h>
@@ -8,10 +10,26 @@
 #define MAX_REGWRITES_PER_REQ 16
 #define MAX_RETRIES 1
 
+/* These are universal amongst AuthenTec devices */
 status_t aes_usb_exec(status_t (*usb_write)(), status_t (*clear_stall)(),
 	bool, const pairs *, unsigned int);
 
-status_t aes_usb_exec(status_t (*usb_write)(), status_t (*clear_stall)(),
+static status_t usb_write(status_t (*bulk_transfer)(),
+	const pairs *cmd, unsigned int num)
+{
+	size_t size = num * 2, offset = 0;
+	unsigned char data[size];
+	unsigned int i;
+
+	for (i = 0; i < num; i++) {
+		data[offset++] = cmd[i].reg;
+		data[offset++] = cmd[i].val;
+	}
+
+	return bulk_transfer(data, size);
+}
+
+status_t aes_usb_exec(status_t (*bulk_transfer)(), status_t (*clear_stall)(),
 	bool strict, const pairs *cmd, unsigned int num)
 {
 	unsigned int i;
@@ -38,7 +56,7 @@ status_t aes_usb_exec(status_t (*usb_write)(), status_t (*clear_stall)(),
 		add_offset = j - i;
 		limit = strict ? 0 : MAX_RETRIES;
 		for (j = 0; j <= limit; j++) {
-			if ((res = usb_write(&cmd[i], add_offset)) == B_OK)
+			if ((res = usb_write(bulk_transfer, &cmd[i], add_offset)) == B_OK)
 				break;
 			else if (res == B_TIMED_OUT) {
 				if (strict)
@@ -63,3 +81,4 @@ status_t aes_usb_exec(status_t (*usb_write)(), status_t (*clear_stall)(),
 
 	return B_OK;
 }
+/* */
