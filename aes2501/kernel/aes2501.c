@@ -66,12 +66,12 @@ static status_t aes_setup_pipes(const usb_interface_info *);
 static status_t aes_usb_read(unsigned char* const, size_t);
 static status_t aes_usb_read_regs(unsigned char *);
 
-static status_t usb_write(const pairs *, unsigned int);
+static status_t bulk_transfer(unsigned char *, size_t);
 static status_t clear_stall(void);
 
 static void input_aes_uninit_driver(void *);
 
-extern status_t aes_usb_exec(status_t (*usb_write)(), status_t (*clear_stall)(),
+extern status_t aes_usb_exec(status_t (*bulk_transfer)(), status_t (*clear_stall)(),
 	bool strict, const pairs *cmd, unsigned int num);
 
 //	#pragma mark -
@@ -347,9 +347,9 @@ input_aes_init_driver(device_node *node, void **_driverCookie)
 	}
 
 	if ((input_aes->lock = create_sem(0, "lock")) < 0 ||
-		aes_usb_exec(&usb_write, &clear_stall, true, cmd_1, G_N_ELEMENTS(cmd_1)) != B_OK ||
+		aes_usb_exec(&bulk_transfer, &clear_stall, true, cmd_1, G_N_ELEMENTS(cmd_1)) != B_OK ||
 		aes_usb_read(NULL, 44 /*20*/) != B_OK || // !
-		aes_usb_exec(&usb_write, &clear_stall, true, cmd_2, G_N_ELEMENTS(cmd_2)) != B_OK
+		aes_usb_exec(&bulk_transfer, &clear_stall, true, cmd_2, G_N_ELEMENTS(cmd_2)) != B_OK
 	) {
 		input_aes_uninit_driver(NULL);
 		return B_ERROR;
@@ -375,7 +375,7 @@ input_aes_init_driver(device_node *node, void **_driverCookie)
 	i = 0;
 	while (buf[0x5f] == 0x6b) {
 		TRACE("reg 0xaf = 0x%x\n", buf[0x5f]);
-		if (aes_usb_exec(&usb_write, &clear_stall, true, cmd_3, G_N_ELEMENTS(cmd_3)) != B_OK ||
+		if (aes_usb_exec(&bulk_transfer, &clear_stall, true, cmd_3, G_N_ELEMENTS(cmd_3)) != B_OK ||
 			aes_usb_read_regs(buf) != B_OK) {
 			free(buf);
 			input_aes_uninit_driver(NULL);
@@ -391,7 +391,7 @@ input_aes_init_driver(device_node *node, void **_driverCookie)
 			dprintf("0x%x = 0x%x, ", i, buf[i]);
 #endif
 	free(buf);
-	if (aes_usb_exec(&usb_write, &clear_stall, true, cmd_4, G_N_ELEMENTS(cmd_4)) != B_OK) {
+	if (aes_usb_exec(&bulk_transfer, &clear_stall, true, cmd_4, G_N_ELEMENTS(cmd_4)) != B_OK) {
 		input_aes_uninit_driver(NULL);
 		return B_ERROR;
 	}
@@ -571,23 +571,16 @@ static status_t aes_usb_read_regs(unsigned char *buf)
 {
 	const pairs regwrite[] = { { AES2501_REG_CTRL2, AES2501_CTRL2_READ_REGS } };
 
-	if (aes_usb_exec(&usb_write, &clear_stall, true, regwrite, 1) != B_OK)
+	if (aes_usb_exec(&bulk_transfer, &clear_stall, true, regwrite, 1) != B_OK)
 		return B_ERROR;
 
 	return aes_usb_read(buf, 126);
 }
 
 /* Callbacks */
-static status_t usb_write(const pairs *cmd, unsigned int num)
+static status_t bulk_transfer(unsigned char *data, size_t size)
 {
-	size_t size = num * 2, offset = 0, ret;
-	unsigned char data[size];
-	unsigned int i;
-
-	for (i = 0; i < num; i++) {
-		data[offset++] = cmd[i].reg;
-		data[offset++] = cmd[i].val;
-	}
+	status_t ret;
 
 	if (input_aes_static.usb->queue_bulk(input_aes->device.pipe_out, data, size,
 		&aes_usb_transfer_callback, NULL) != B_OK)
