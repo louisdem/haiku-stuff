@@ -57,6 +57,12 @@ public:
 private:
 	void _ReadSettings();
 	status_t aes_setup_pipes(const BUSBInterface *);
+	status_t InitThread();
+	static status_t InitThreadProxy(void *_this)
+	{
+		AesInputDevice *dev = (AesInputDevice *) _this;
+		return dev->InitThread();
+	}
 
 	status_t bulk_transfer(unsigned char *, size_t);
 	status_t clear_stall();

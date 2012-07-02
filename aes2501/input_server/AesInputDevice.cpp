@@ -4,6 +4,10 @@
 
 const static char *kAesInputDirectory = "/dev/input/aes2501";
 
+
+/* Missing things: serialisation on communication between threads */
+
+
 BInputServerDevice*
 instantiate_input_device()
 {
@@ -17,8 +21,10 @@ AesInputDevice::AesInputDevice()
 }
 AesInputDevice::~AesInputDevice()
 {
-	if (this->URoster)
+	if (this->URoster) {
+		URoster->Stop();
 		delete URoster;
+	}
 	if (this->settings)
 		free(settings);
 }
@@ -32,25 +38,8 @@ AesInputDevice::InitCheck()
 	input_device_ref dev = { "AuthenTec AES2501 USB", B_POINTING_DEVICE,
 		(void *) this };
 	input_device_ref *deviceList[] = { &dev, NULL };
-
-	const pairs start_scan_cmd[] = {
-	{ 0xb0, 0x27 },
-	{ AES2501_REG_CTRL1, AES2501_CTRL1_MASTER_RESET },
-	{ AES2501_REG_EXCITCTRL, 0x40 },
-	{ 0xff, 0x00 },
-	{ AES2501_REG_CTRL1, AES2501_CTRL1_MASTER_RESET },
-	{ AES2501_REG_EXCITCTRL, 0x40 },
-	{ AES2501_REG_CTRL1, AES2501_CTRL1_MASTER_RESET },
-	{ AES2501_REG_EXCITCTRL, 0x40 },
-	{ AES2501_REG_CTRL1, AES2501_CTRL1_MASTER_RESET },
-	{ AES2501_REG_EXCITCTRL, 0x40 },
-	{ AES2501_REG_CTRL1, AES2501_CTRL1_MASTER_RESET },
-	{ AES2501_REG_EXCITCTRL, 0x40 },
-	{ AES2501_REG_CTRL1, AES2501_CTRL1_MASTER_RESET },
-	{ AES2501_REG_EXCITCTRL, 0x40 },
-	{ AES2501_REG_CTRL1, AES2501_CTRL1_SCAN_RESET },
-	{ AES2501_REG_CTRL1, AES2501_CTRL1_SCAN_RESET },
-	};
+	thread_id InitThread;
+	char buf[3];
 
 	// (f)open would be poor choice
 	if (!entry.Exists()) {
@@ -87,8 +76,27 @@ AesInputDevice::InitCheck()
 	}
 	// end of dupe
 
+	// simulate 'block with timeout'
+	if ((InitThread = spawn_thread(this->InitThreadProxy, "AES2501 Init", 50, this)) < B_OK ||
+		send_data(InitThread, 0, NULL, 0) != B_OK || // pass main's thread id
+		resume_thread(InitThread) != B_OK)
+		return B_ERROR;
+	timeout = 3000;
+	start = system_time();
+	while(!has_data(InitThread)) {
+		if ((system_time() - start) > timeout) {
+			kill_thread(InitThread);
+			return B_ERROR;
+		}
+		snooze(timeout);
+	}
+	receive_data(&InitThread, (char *) &buf, 3);
+	if (strcmp(buf, "OK"))
+		return B_ERROR;
+
 	if (!(this->settings = (AesSettings *) malloc(sizeof(AesSettings))))
 		return B_ERROR;
+
 	this->RegisterDevices(deviceList);
 	return B_OK;
 }
@@ -159,6 +167,41 @@ status_t AesInputDevice::aes_setup_pipes(const BUSBInterface *uii)
 	PRINT("endpoint is: %d %d\n", dev_data.pipe_in->Index(), dev_data.pipe_out->Index());
 
 	return epts[0] && epts[1] ? B_OK : B_ENTRY_NOT_FOUND;
+}
+
+status_t AesInputDevice::InitThread()
+{
+	thread_id sender;
+
+	const pairs start_scan_cmd[] = {
+	{ 0xb0, 0x27 },
+	{ AES2501_REG_CTRL1, AES2501_CTRL1_MASTER_RESET },
+	{ AES2501_REG_EXCITCTRL, 0x40 },
+	{ 0xff, 0x00 },
+	{ AES2501_REG_CTRL1, AES2501_CTRL1_MASTER_RESET },
+	{ AES2501_REG_EXCITCTRL, 0x40 },
+	{ AES2501_REG_CTRL1, AES2501_CTRL1_MASTER_RESET },
+	{ AES2501_REG_EXCITCTRL, 0x40 },
+	{ AES2501_REG_CTRL1, AES2501_CTRL1_MASTER_RESET },
+	{ AES2501_REG_EXCITCTRL, 0x40 },
+	{ AES2501_REG_CTRL1, AES2501_CTRL1_MASTER_RESET },
+	{ AES2501_REG_EXCITCTRL, 0x40 },
+	{ AES2501_REG_CTRL1, AES2501_CTRL1_MASTER_RESET },
+	{ AES2501_REG_EXCITCTRL, 0x40 },
+	{ AES2501_REG_CTRL1, AES2501_CTRL1_SCAN_RESET },
+	{ AES2501_REG_CTRL1, AES2501_CTRL1_SCAN_RESET },
+	};
+
+	receive_data(&sender, NULL, 0);
+
+	if (aes_usb_exec(&this->g_bulk_transfer, &g_clear_stall, true, start_scan_cmd,
+		G_N_ELEMENTS(start_scan_cmd)) != B_OK) {
+		send_data(sender, 0, "ER", 3);
+		return B_OK;
+	}
+
+	send_data(sender, 0, "OK", 3);
+	return B_OK;
 }
 
 /* Callbacks */
