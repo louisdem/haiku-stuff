@@ -26,6 +26,8 @@
 #endif
 
 extern "C" _EXPORT BInputServerDevice* instantiate_input_device();
+extern "C" status_t aes_usb_exec(status_t (*bulk_transfer)(unsigned char *, size_t),
+	status_t (*clear_stall)(), bool strict, const pairs *cmd, unsigned int num);
 
 enum {
 	AES_FIRST_BUTTON = 1,
@@ -37,6 +39,9 @@ typedef struct {
 		 handle_scroll;
 	int which_button;
 } AesSettings;
+
+class AesInputDevice;
+static AesInputDevice *InputDevice;
 class AesInputDevice: public BInputServerDevice {
 	class AesUSBRoster *URoster;
 
@@ -52,6 +57,17 @@ public:
 private:
 	void _ReadSettings();
 	status_t aes_setup_pipes(const BUSBInterface *);
+
+	status_t bulk_transfer(unsigned char *, size_t);
+	status_t clear_stall();
+	static status_t g_bulk_transfer(unsigned char *d, size_t s)
+	{
+		return InputDevice->bulk_transfer(d, s);
+	}
+	static status_t g_clear_stall(void)
+	{
+		return InputDevice->clear_stall();
+	}
 public:
 	/* BInputServerDevice */
 	virtual status_t InitCheck();

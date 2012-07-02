@@ -9,6 +9,8 @@
 #define AES_VID 0x08ff
 #define AES_PID 0x2500
 
+#define G_N_ELEMENTS(arr) (sizeof(arr) / sizeof((arr)[0]))
+
 #define DEMODPHASE_NONE		0x00
 enum aes2501_regs_common {
 	AES2501_REG_CTRL1 = 0x80,

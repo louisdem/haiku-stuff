@@ -77,8 +77,6 @@ extern status_t aes_usb_exec(status_t (*bulk_transfer)(), status_t (*clear_stall
 //	#pragma mark -
 // device module API
 
-#define G_N_ELEMENTS(arr) (sizeof(arr) / sizeof((arr)[0]))
-
 #define BULK_TIMEOUT 2000
 
 enum aes2501_regs {

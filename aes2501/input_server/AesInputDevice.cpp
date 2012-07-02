@@ -3,7 +3,6 @@
 #include "AesInputDevice.h"
 
 const static char *kAesInputDirectory = "/dev/input/aes2501";
-static AesInputDevice *InputDevice;
 
 BInputServerDevice*
 instantiate_input_device()
@@ -161,3 +160,20 @@ status_t AesInputDevice::aes_setup_pipes(const BUSBInterface *uii)
 
 	return epts[0] && epts[1] ? B_OK : B_ENTRY_NOT_FOUND;
 }
+
+/* Callbacks */
+status_t AesInputDevice::bulk_transfer(unsigned char *data, size_t size)
+{
+	if (this->dev_data.pipe_out->BulkTransfer(data, size) != size)
+		return B_ERROR;
+
+	if (dev_data.pipe_out->IsStalled())
+		return B_DEV_STALLED;
+
+	return B_OK;
+}
+status_t AesInputDevice::clear_stall()
+{
+	return this->dev_data.pipe_out->ClearStall();
+}
+/* */
