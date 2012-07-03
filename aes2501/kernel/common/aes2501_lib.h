@@ -3,4 +3,9 @@
 
 typedef struct { int reg, val; } pairs;
 
+enum transfer_direction {
+	AES2501_IN,
+	AES2501_OUT
+};
+
 #endif // AES_LIB_H

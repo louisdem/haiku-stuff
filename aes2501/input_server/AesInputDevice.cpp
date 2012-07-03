@@ -27,6 +27,8 @@ AesInputDevice::~AesInputDevice()
 	}
 	if (this->settings)
 		free(settings);
+	if (this->fd_cmd)
+		delete fd_cmd;
 }
 
 status_t
@@ -78,10 +80,11 @@ AesInputDevice::InitCheck()
 
 	// simulate 'block with timeout'
 	if ((InitThread = spawn_thread(this->InitThreadProxy, "AES2501 Init", 50, this)) < B_OK ||
-		send_data(InitThread, 0, NULL, 0) != B_OK || // pass main's thread id
-		resume_thread(InitThread) != B_OK)
+		(EmulatedInterruptId = spawn_thread(EmulatedInterruptProxy, "AES2501 Poll", 50, this)) < B_OK ||
+		send_data(InitThread, 0, NULL, 0) != B_OK) // pass main's thread id
 		return B_ERROR;
-	timeout = 3000;
+	resume_thread(InitThread);
+	timeout = 3500; // bump up, if added code into InitThread() or subcalls
 	start = system_time();
 	while(!has_data(InitThread)) {
 		if ((system_time() - start) > timeout) {
@@ -117,7 +120,15 @@ AesInputDevice::Start(const char *name, void *cookie)
 		}
 		but Haiku allows only global mouse settings */
 
+	this->fd_cmd = new finger_det_cmd();
+	resume_thread(this->EmulatedInterruptId);
+
 	return B_OK; // 'll be ignored
+}
+status_t
+AesInputDevice::Stop(const char *name, void *cookie)
+{
+	kill_thread(this->EmulatedInterruptId);
 }
 
 status_t
@@ -169,6 +180,13 @@ status_t AesInputDevice::aes_setup_pipes(const BUSBInterface *uii)
 	return epts[0] && epts[1] ? B_OK : B_ENTRY_NOT_FOUND;
 }
 
+int AesInputDevice::DetectFinger(unsigned char *buf)
+{
+	if (aes_usb_exec(&this->g_bulk_transfer, &g_clear_stall, false, this->fd_cmd->cmds,
+		G_N_ELEMENTS(fd_cmd->cmds)) == B_OK)
+		;
+}
+
 status_t AesInputDevice::InitThread()
 {
 	thread_id sender;
@@ -197,20 +215,33 @@ status_t AesInputDevice::InitThread()
 	if (aes_usb_exec(&this->g_bulk_transfer, &g_clear_stall, true, start_scan_cmd,
 		G_N_ELEMENTS(start_scan_cmd)) != B_OK) {
 		send_data(sender, 0, "ER", 3);
-		return B_OK;
+		return 0;
 	}
 
 	send_data(sender, 0, "OK", 3);
-	return B_OK;
+	return 0;
+}
+status_t AesInputDevice::EmulatedInterrupt()
+{
+	unsigned char buffer[20];
+}
+
+status_t AesInputDevice::aes_usb_read(unsigned char* const buf, size_t size)
+{
+	// TO-DO: add read'n'throw
+	return this->bulk_transfer(AES2501_IN, buf, size);
 }
 
 /* Callbacks */
-status_t AesInputDevice::bulk_transfer(unsigned char *data, size_t size)
+status_t AesInputDevice::bulk_transfer(int direction, unsigned char *data, size_t size)
 {
-	if (this->dev_data.pipe_out->BulkTransfer(data, size) != size)
+	BUSBEndpoint *dir = (direction == AES2501_OUT ? this->dev_data.pipe_out
+											  	  : dev_data.pipe_in);
+
+	if (dir->BulkTransfer(data, size) != size)
 		return B_ERROR;
 
-	if (dev_data.pipe_out->IsStalled())
+	if (dir->IsStalled())
 		return B_DEV_STALLED;
 
 	return B_OK;

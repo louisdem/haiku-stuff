@@ -26,7 +26,7 @@
 #endif
 
 extern "C" _EXPORT BInputServerDevice* instantiate_input_device();
-extern "C" status_t aes_usb_exec(status_t (*bulk_transfer)(unsigned char *, size_t),
+extern "C" status_t aes_usb_exec(status_t (*bulk_transfer)(int, unsigned char *, size_t),
 	status_t (*clear_stall)(), bool strict, const pairs *cmd, unsigned int num);
 
 enum {
@@ -44,6 +44,7 @@ class AesInputDevice;
 static AesInputDevice *InputDevice;
 class AesInputDevice: public BInputServerDevice {
 	class AesUSBRoster *URoster;
+	class finger_det_cmd *fd_cmd;
 
 	BUSBDevice *device;
 	struct {
@@ -51,24 +52,33 @@ class AesInputDevice: public BInputServerDevice {
 					 *pipe_out;
 	} dev_data;
 	AesSettings *settings;
+	thread_id EmulatedInterruptId;
 public:
 	AesInputDevice();
 	virtual ~AesInputDevice();
 private:
 	void _ReadSettings();
 	status_t aes_setup_pipes(const BUSBInterface *);
+	status_t aes_usb_read(unsigned char* const, size_t);
+	int DetectFinger(unsigned char *);
 	status_t InitThread();
+	status_t EmulatedInterrupt();
 	static status_t InitThreadProxy(void *_this)
 	{
 		AesInputDevice *dev = (AesInputDevice *) _this;
 		return dev->InitThread();
 	}
-
-	status_t bulk_transfer(unsigned char *, size_t);
-	status_t clear_stall();
-	static status_t g_bulk_transfer(unsigned char *d, size_t s)
+	static status_t EmulatedInterruptProxy(void *_this)
 	{
-		return InputDevice->bulk_transfer(d, s);
+		AesInputDevice *dev = (AesInputDevice *) _this;
+		return dev->EmulatedInterrupt();
+	}
+
+	status_t bulk_transfer(int, unsigned char *, size_t);
+	status_t clear_stall();
+	static status_t g_bulk_transfer(int dir, unsigned char *dat, size_t s)
+	{
+		return InputDevice->bulk_transfer(dir, dat, s);
 	}
 	static status_t g_clear_stall(void)
 	{
@@ -78,6 +88,7 @@ public:
 	/* BInputServerDevice */
 	virtual status_t InitCheck();
 	virtual status_t Start(const char*, void*);
+	virtual status_t Stop(const char*, void*);
 	/* */
 
 	friend class AesUSBRoster;

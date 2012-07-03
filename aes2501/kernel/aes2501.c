@@ -66,7 +66,7 @@ static status_t aes_setup_pipes(const usb_interface_info *);
 static status_t aes_usb_read(unsigned char* const, size_t);
 static status_t aes_usb_read_regs(unsigned char *);
 
-static status_t bulk_transfer(unsigned char *, size_t);
+static status_t bulk_transfer(int, unsigned char *, size_t);
 static status_t clear_stall(void);
 
 static void input_aes_uninit_driver(void *);
@@ -531,15 +531,8 @@ static status_t aes_usb_read(unsigned char* const buf, size_t size)
 
 	if (!(data = (buf ? buf : malloc(size)) ))
 		return B_ERROR;
-
-	if (input_aes_static.usb->queue_bulk(input_aes->device.pipe_in, data, size,
-		&aes_usb_transfer_callback, NULL) != B_OK) {
-		if (!buf)
-			free(data);
-		return B_ERROR;
-	}
-
-	if ((ret = acquire_sem_etc(input_aes->lock, 1, B_RELATIVE_TIMEOUT, BULK_TIMEOUT)) < B_OK) {
+	if ((ret = bulk_transfer(AES2501_IN, data, size)) != B_OK &&
+		ret != B_DEV_FIFO_UNDERRUN && ret != B_DEV_FIFO_OVERRUN) {
 		if (!buf)
 			free(data);
 		return B_ERROR;
@@ -547,7 +540,7 @@ static status_t aes_usb_read(unsigned char* const buf, size_t size)
 	if (!buf)
 		free(data);
 
-	if (input_aes->transfer.status == B_OK) {
+	if (ret == B_OK) {
 		if (buf && input_aes->transfer.actual_length != size) {
 				TRACE("request %lu bytes, but got %lu bytes.\n", size,
 					input_aes->transfer.actual_length);
@@ -576,12 +569,14 @@ static status_t aes_usb_read_regs(unsigned char *buf)
 }
 
 /* Callbacks */
-static status_t bulk_transfer(unsigned char *data, size_t size)
+static status_t bulk_transfer(int direction, unsigned char *data, size_t size)
 {
+	usb_pipe *dir = (direction == AES2501_OUT ? &input_aes->device.pipe_out
+											  : &input_aes->device.pipe_in);
 	status_t ret;
 
-	if (input_aes_static.usb->queue_bulk(input_aes->device.pipe_out, data, size,
-		&aes_usb_transfer_callback, NULL) != B_OK)
+	if (input_aes_static.usb->queue_bulk(*dir, data, size, &aes_usb_transfer_callback,
+		NULL) != B_OK)
 		return B_ERROR;
 
 	// block for consecutive transfers
@@ -592,9 +587,7 @@ static status_t bulk_transfer(unsigned char *data, size_t size)
 		return B_ERROR;
 	}
 
-	if (input_aes->transfer.status == B_OK)
-		return B_OK;
-	return B_ERROR;
+	return input_aes->transfer.status;
 }
 static status_t clear_stall(void)
 {

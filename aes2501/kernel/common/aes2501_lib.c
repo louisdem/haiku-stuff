@@ -26,7 +26,7 @@ static status_t usb_write(status_t (*bulk_transfer)(),
 		data[offset++] = cmd[i].val;
 	}
 
-	return bulk_transfer(data, size);
+	return bulk_transfer(AES2501_OUT, data, size);
 }
 
 status_t aes_usb_exec(status_t (*bulk_transfer)(), status_t (*clear_stall)(),
