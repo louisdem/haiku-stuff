@@ -41,7 +41,7 @@ typedef struct {
 typedef struct {
 	struct {
 		usb_pipe pipe_in,
-			 pipe_out;
+				 pipe_out;
 	} device;
 	struct {
 		status_t status;
@@ -62,9 +62,9 @@ static device_manager_info *sDeviceManager;
 static input_aes_type *input_aes;
 
 static void aes_usb_transfer_callback(void *, status_t, void *, size_t);
+static status_t aes_usb_read_regs(unsigned char *);
 static status_t aes_setup_pipes(const usb_interface_info *);
 static status_t aes_usb_read(unsigned char* const, size_t);
-static status_t aes_usb_read_regs(unsigned char *);
 
 static status_t bulk_transfer(int, unsigned char *, size_t);
 static status_t clear_stall(void);
@@ -191,7 +191,7 @@ static float
 input_aes_support(device_node *parent)
 {
 	uint32 path_id;
-	bigtime_t timeout = 5000000
+	bigtime_t timeout = 6000000
 	/* 9000000 // overrated much, measured on busy-wait */, start;
 
 	// limit to single driver instance
@@ -487,6 +487,33 @@ module_info *modules[] = {
 void c------------------------------() {}
 */
 
+static void aes_usb_transfer_callback(void *cookie, status_t status, void *data, size_t actlen)
+{
+	switch (status) {
+		case B_DEV_UNEXPECTED_PID:
+			input_aes->transfer.status = B_BUSY;
+			break;
+		case B_DEV_FIFO_UNDERRUN:
+			//TRACE("data underrun\n");
+		case B_DEV_FIFO_OVERRUN:
+		default:
+			input_aes->transfer.status = status;
+	};
+	input_aes->transfer.actual_length = actlen;
+
+	release_sem_etc(input_aes->lock, 1, 0);
+}
+
+static status_t aes_usb_read_regs(unsigned char *buf)
+{
+	const pairs regwrite[] = { { AES2501_REG_CTRL2, AES2501_CTRL2_READ_REGS } };
+
+	if (aes_usb_exec(&bulk_transfer, &clear_stall, true, regwrite, 1) != B_OK)
+		return B_ERROR;
+
+	return aes_usb_read(buf, 126);
+}
+
 static status_t aes_setup_pipes(const usb_interface_info *uii)
 {
 	size_t epts[] = { -1, -1 }, ep = 0;
@@ -505,23 +532,6 @@ static status_t aes_setup_pipes(const usb_interface_info *uii)
 	TRACE("endpoint is: %lx %lx\n", input_aes->device.pipe_in, input_aes->device.pipe_out);
 
 	return epts[0] >= 0 && epts[1] >= 0 ? B_OK : B_ENTRY_NOT_FOUND;
-}
-
-static void aes_usb_transfer_callback(void *cookie, status_t status, void *data, size_t actlen)
-{
-	switch (status) {
-		case B_DEV_UNEXPECTED_PID:
-			input_aes->transfer.status = B_BUSY;
-			break;
-		case B_DEV_FIFO_UNDERRUN:
-			//TRACE("data underrun\n");
-		case B_DEV_FIFO_OVERRUN:
-		default:
-			input_aes->transfer.status = status;
-	};
-	input_aes->transfer.actual_length = actlen;
-
-	release_sem_etc(input_aes->lock, 1, 0);
 }
 
 static status_t aes_usb_read(unsigned char* const buf, size_t size)
@@ -552,20 +562,10 @@ static status_t aes_usb_read(unsigned char* const buf, size_t size)
 		if (input_aes->transfer.status == B_DEV_FIFO_UNDERRUN)
 			return B_OK;
 		if (input_aes->transfer.status == B_DEV_FIFO_OVERRUN)
-			dprintf("aes2501: data overrun. please bump aes_usb_read(NULL, [value] by some");
+			dprintf("aes2501: data overrun. please bump aes_usb_read(NULL, [value] by some\n");
 	}
 
 	return B_ERROR;
-}
-
-static status_t aes_usb_read_regs(unsigned char *buf)
-{
-	const pairs regwrite[] = { { AES2501_REG_CTRL2, AES2501_CTRL2_READ_REGS } };
-
-	if (aes_usb_exec(&bulk_transfer, &clear_stall, true, regwrite, 1) != B_OK)
-		return B_ERROR;
-
-	return aes_usb_read(buf, 126);
 }
 
 /* Callbacks */

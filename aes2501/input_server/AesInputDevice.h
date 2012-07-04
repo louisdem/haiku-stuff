@@ -9,6 +9,8 @@
 #include <Entry.h>
 #include <driver_settings.h>
 
+#define POLL_INTERVAL 1000
+
 #define PRINT_AES 1
 #ifdef PRINT_AES
 	inline void _iprint(const char* fmt, ...) {
@@ -34,6 +36,10 @@ enum {
 	AES_SECOND_BUTTON,
 	AES_THIRD_BUTTON
 };
+enum {
+	AES_DETECT_FINGER,
+	AES_BREAK_LOOP
+};
 typedef struct {
 	bool handle_click,
 		 handle_scroll;
@@ -44,7 +50,6 @@ class AesInputDevice;
 static AesInputDevice *InputDevice;
 class AesInputDevice: public BInputServerDevice {
 	class AesUSBRoster *URoster;
-	class finger_det_cmd *fd_cmd;
 
 	BUSBDevice *device;
 	struct {
@@ -58,9 +63,6 @@ public:
 	virtual ~AesInputDevice();
 private:
 	void _ReadSettings();
-	status_t aes_setup_pipes(const BUSBInterface *);
-	status_t aes_usb_read(unsigned char* const, size_t);
-	int DetectFinger(unsigned char *);
 	status_t InitThread();
 	status_t EmulatedInterrupt();
 	static status_t InitThreadProxy(void *_this)
@@ -73,6 +75,8 @@ private:
 		AesInputDevice *dev = (AesInputDevice *) _this;
 		return dev->EmulatedInterrupt();
 	}
+	status_t aes_setup_pipes(const BUSBInterface *);
+	status_t aes_usb_read(unsigned char* const, size_t);
 
 	status_t bulk_transfer(int, unsigned char *, size_t);
 	status_t clear_stall();
@@ -99,46 +103,5 @@ class AesUSBRoster: public BUSBRoster {
 public:
 	virtual status_t DeviceAdded(BUSBDevice *dev);
 };
-
-/*
-void c------------------------------() {}
-*/
-
-/* protos */
-class finger_det_cmd {
-public:
-	const pairs *cmds;
-	finger_det_cmd() {
-		const pairs finger_det_cmd[] = {
-	{ AES2501_REG_CTRL1, AES2501_CTRL1_MASTER_RESET },
-	{ AES2501_REG_EXCITCTRL, 0x40 },
-	{ AES2501_REG_DETCTRL,
-		AES2501_DETCTRL_DRATE_CONTINUOUS | AES2501_DETCTRL_SDELAY_31_MS },
-	{ AES2501_REG_COLSCAN, AES2501_COLSCAN_SRATE_128_US },
-	{ AES2501_REG_MEASDRV, AES2501_MEASDRV_MDRIVE_0_325 | AES2501_MEASDRV_MEASURE_SQUARE },
-	{ AES2501_REG_MEASFREQ, AES2501_MEASFREQ_2M },
-	{ AES2501_REG_DEMODPHASE1, DEMODPHASE_NONE },
-	{ AES2501_REG_DEMODPHASE2, DEMODPHASE_NONE },
-	{ AES2501_REG_CHANGAIN,
-		AES2501_CHANGAIN_STAGE2_4X | AES2501_CHANGAIN_STAGE1_16X },
-	{ AES2501_REG_ADREFHI, 0x44 },
-	{ AES2501_REG_ADREFLO, 0x34 },
-	{ AES2501_REG_STRTCOL, 0x16 },
-	{ AES2501_REG_ENDCOL, 0x16 },
-	{ 0xff, 0x00 }, //{...image data format...},
-	{ AES2501_REG_TREG1, 0x70 },
-	{ 0xa2, 0x02 },
-	{ 0xa7, 0x00 },
-	{ AES2501_REG_TREGC, AES2501_TREGC_ENABLE },
-	{ AES2501_REG_TREGD, 0x1a },
-	{ 0, 0 },
-	{ AES2501_REG_CTRL1, AES2501_CTRL1_REG_UPDATE },
-	{ AES2501_REG_CTRL2, AES2501_CTRL2_SET_ONE_SHOT },
-	{ AES2501_REG_LPONT, AES2501_LPONT_MIN_VALUE },
-		};
-		cmds = &finger_det_cmd[0];
-	};
-};
-/* */
 
 #endif // AES_INPUT_DEVICE_H

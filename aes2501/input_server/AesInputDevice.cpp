@@ -2,6 +2,7 @@
 
 #include "AesInputDevice.h"
 
+const static uint32 kPollThreadPriority = B_FIRST_REAL_TIME_PRIORITY + 4;
 const static char *kAesInputDirectory = "/dev/input/aes2501";
 
 
@@ -15,20 +16,18 @@ instantiate_input_device()
 }
 AesInputDevice::AesInputDevice()
 {
-	this->device = NULL;
+	device = NULL;
 
-	this->URoster = NULL; settings = NULL;
+	URoster = NULL; settings = NULL;
 }
 AesInputDevice::~AesInputDevice()
 {
-	if (this->URoster) {
+	if (URoster) {
 		URoster->Stop();
 		delete URoster;
 	}
-	if (this->settings)
+	if (settings)
 		free(settings);
-	if (this->fd_cmd)
-		delete fd_cmd;
 }
 
 status_t
@@ -49,7 +48,7 @@ AesInputDevice::InitCheck()
 		return B_ERROR;
 	}
 
-	this->URoster = new AesUSBRoster();
+	URoster = new AesUSBRoster();
 
 	/* dupe: We're doing a duplicate of what kernel driver did in it's init phase,
 	   because of two reasons: 1) someone may wish to adopt this project for
@@ -59,7 +58,7 @@ AesInputDevice::InitCheck()
 
 	// as always :-!
 	start = system_time();
-	while(this->device == NULL) {
+	while(device == NULL) {
 		if ((system_time() - start) > timeout) {
 			debug_printf("aes2501: Supported device is missing. Unplugged?\n");
 
@@ -68,7 +67,7 @@ AesInputDevice::InitCheck()
 		snooze(timeout);
 	}
 
-	if (this->device->SetConfiguration(conf = device->ConfigurationAt(0)) < B_OK) {
+	if (device->SetConfiguration(conf = device->ConfigurationAt(0)) < B_OK) {
 		PRINT("can't set configuration\n");
 		return B_ERROR;
 	}
@@ -79,12 +78,13 @@ AesInputDevice::InitCheck()
 	// end of dupe
 
 	// simulate 'block with timeout'
-	if ((InitThread = spawn_thread(this->InitThreadProxy, "AES2501 Init", 50, this)) < B_OK ||
-		(EmulatedInterruptId = spawn_thread(EmulatedInterruptProxy, "AES2501 Poll", 50, this)) < B_OK ||
+	if ((InitThread = spawn_thread(InitThreadProxy, "AES2501 Init", 50, this)) < B_OK ||
+		(EmulatedInterruptId = spawn_thread(EmulatedInterruptProxy, "AES2501 Poll",
+		kPollThreadPriority, this)) < B_OK ||
 		send_data(InitThread, 0, NULL, 0) != B_OK) // pass main's thread id
 		return B_ERROR;
 	resume_thread(InitThread);
-	timeout = 3500; // bump up, if added code into InitThread() or subcalls
+	timeout = 4000; // bump up, if added code into InitThread() or subcalls
 	start = system_time();
 	while(!has_data(InitThread)) {
 		if ((system_time() - start) > timeout) {
@@ -97,10 +97,10 @@ AesInputDevice::InitCheck()
 	if (strcmp(buf, "OK"))
 		return B_ERROR;
 
-	if (!(this->settings = (AesSettings *) malloc(sizeof(AesSettings))))
+	if (!(settings = (AesSettings *) malloc(sizeof(AesSettings))))
 		return B_ERROR;
 
-	this->RegisterDevices(deviceList);
+	RegisterDevices(deviceList);
 	return B_OK;
 }
 status_t
@@ -110,7 +110,7 @@ AesInputDevice::Start(const char *name, void *cookie)
 		our_device->set_mouse_type(1); _/ */
 
 	settings->which_button = AES_SECOND_BUTTON;
-	this->_ReadSettings();
+	_ReadSettings();
 
 	/* \_ and:
 		if (settings->handle_click == true) {
@@ -120,15 +120,14 @@ AesInputDevice::Start(const char *name, void *cookie)
 		}
 		but Haiku allows only global mouse settings */
 
-	this->fd_cmd = new finger_det_cmd();
-	resume_thread(this->EmulatedInterruptId);
+	resume_thread(EmulatedInterruptId);
 
-	return B_OK; // 'll be ignored
+	return 0;
 }
 status_t
 AesInputDevice::Stop(const char *name, void *cookie)
 {
-	kill_thread(this->EmulatedInterruptId);
+	kill_thread(EmulatedInterruptId);
 }
 
 status_t
@@ -154,37 +153,11 @@ void AesInputDevice::_ReadSettings()
 	if ((handle = load_driver_settings("aes2501"))) {
 		const char *str = get_driver_parameter(handle, "bind_to_which_button", NULL, NULL);
 		if (str && (str[0] == '1' || str[0] == '2' || str[0] == '3'))
-			this->settings->which_button = atoi(str);
+			settings->which_button = atoi(str);
 	}
 	settings->handle_click = get_driver_boolean_parameter(handle, "handle_click", true, true);
 	settings->handle_scroll = get_driver_boolean_parameter(handle, "handle_scroll", true, true);
 	unload_driver_settings(handle);
-}
-
-status_t AesInputDevice::aes_setup_pipes(const BUSBInterface *uii)
-{
-	size_t ep = 0;
-	BUSBEndpoint *epts[] = { NULL, NULL };
-
-	for (; ep < uii->CountEndpoints(); ep++) {
-		BUSBEndpoint *ed = (BUSBEndpoint *) uii->EndpointAt(ep);
-		if (ed->IsBulk())
-			(ed->IsInput()) ? (epts[0] = ed) : (epts[1] = ed);
-	}
-
-	this->dev_data.pipe_in = epts[0];
-	dev_data.pipe_out = epts[1];
-
-	PRINT("endpoint is: %d %d\n", dev_data.pipe_in->Index(), dev_data.pipe_out->Index());
-
-	return epts[0] && epts[1] ? B_OK : B_ENTRY_NOT_FOUND;
-}
-
-int AesInputDevice::DetectFinger(unsigned char *buf)
-{
-	if (aes_usb_exec(&this->g_bulk_transfer, &g_clear_stall, false, this->fd_cmd->cmds,
-		G_N_ELEMENTS(fd_cmd->cmds)) == B_OK)
-		;
 }
 
 status_t AesInputDevice::InitThread()
@@ -212,7 +185,7 @@ status_t AesInputDevice::InitThread()
 
 	receive_data(&sender, NULL, 0);
 
-	if (aes_usb_exec(&this->g_bulk_transfer, &g_clear_stall, true, start_scan_cmd,
+	if (aes_usb_exec(&g_bulk_transfer, &g_clear_stall, true, start_scan_cmd,
 		G_N_ELEMENTS(start_scan_cmd)) != B_OK) {
 		send_data(sender, 0, "ER", 3);
 		return 0;
@@ -221,25 +194,113 @@ status_t AesInputDevice::InitThread()
 	send_data(sender, 0, "OK", 3);
 	return 0;
 }
+
 status_t AesInputDevice::EmulatedInterrupt()
 {
-	unsigned char buffer[20];
+	unsigned char histgr[44];
+	int state = AES_DETECT_FINGER, sum, i;
+
+	const pairs cmd[] = {
+	{ AES2501_REG_CTRL1, AES2501_CTRL1_MASTER_RESET },
+	{ AES2501_REG_EXCITCTRL, 0x40 },
+	{ AES2501_REG_DETCTRL,
+		AES2501_DETCTRL_DRATE_CONTINUOUS | AES2501_DETCTRL_SDELAY_31_MS },
+	{ AES2501_REG_COLSCAN, AES2501_COLSCAN_SRATE_128_US },
+	{ AES2501_REG_MEASDRV, AES2501_MEASDRV_MDRIVE_0_325 | AES2501_MEASDRV_MEASURE_SQUARE },
+	{ AES2501_REG_MEASFREQ, AES2501_MEASFREQ_2M },
+	{ AES2501_REG_DEMODPHASE1, DEMODPHASE_NONE },
+	{ AES2501_REG_DEMODPHASE2, DEMODPHASE_NONE },
+	{ AES2501_REG_CHANGAIN,
+		AES2501_CHANGAIN_STAGE2_4X | AES2501_CHANGAIN_STAGE1_16X },
+	{ AES2501_REG_ADREFHI, 0x44 },
+	{ AES2501_REG_ADREFLO, 0x34 },
+	{ AES2501_REG_STRTCOL, 0x16 },
+	{ AES2501_REG_ENDCOL, 0x16 },
+	{ 0xff, 0x00 }, //{...image data format...},
+	{ AES2501_REG_TREG1, 0x70 },
+	{ 0xa2, 0x02 },
+	{ 0xa7, 0x00 },
+	{ AES2501_REG_TREGC, AES2501_TREGC_ENABLE },
+	{ AES2501_REG_TREGD, 0x1a },
+	{ 0, 0 },
+	{ AES2501_REG_CTRL1, AES2501_CTRL1_REG_UPDATE },
+	{ AES2501_REG_CTRL2, AES2501_CTRL2_SET_ONE_SHOT },
+	{ AES2501_REG_LPONT, AES2501_LPONT_MIN_VALUE },
+	};
+
+	while (1)
+	{
+		switch (state) {
+		case AES_DETECT_FINGER:
+			if (aes_usb_exec(&g_bulk_transfer, &g_clear_stall, false, cmd,
+				G_N_ELEMENTS(cmd)) != B_OK ||
+				aes_usb_read(histgr, 44 /* 20 */) != B_OK) // !
+				return 0;
+
+			sum = 0;
+			for (i = 1; i < 9; i++)
+				sum += (histgr[i] & 0xf) + (histgr[i] >> 4);
+
+			if (sum > 20) {
+				state = AES_BREAK_LOOP;
+				break;
+			}
+		}
+
+		if (state == AES_BREAK_LOOP)
+			break;
+
+		snooze(POLL_INTERVAL);
+	}
+
+	PRINT("Exiting\n");
+}
+
+status_t AesInputDevice::aes_setup_pipes(const BUSBInterface *uii)
+{
+	size_t ep = 0;
+	BUSBEndpoint *epts[] = { NULL, NULL };
+
+	for (; ep < uii->CountEndpoints(); ep++) {
+		BUSBEndpoint *ed = (BUSBEndpoint *) uii->EndpointAt(ep);
+		if (ed->IsBulk())
+			(ed->IsInput()) ? (epts[0] = ed) : (epts[1] = ed);
+	}
+
+	dev_data.pipe_in = epts[0];
+	dev_data.pipe_out = epts[1];
+
+	PRINT("endpoint is: %d %d\n", dev_data.pipe_in->Index(), dev_data.pipe_out->Index());
+
+	return epts[0] && epts[1] ? B_OK : B_ENTRY_NOT_FOUND;
 }
 
 status_t AesInputDevice::aes_usb_read(unsigned char* const buf, size_t size)
 {
 	// TO-DO: add read'n'throw
-	return this->bulk_transfer(AES2501_IN, buf, size);
+	status_t res = bulk_transfer(AES2501_IN, buf, size);
+	switch (res) {
+		case B_DEV_FIFO_OVERRUN:
+			debug_printf("aes2501: data overrun. please bump aes_usb_read(buf, [value] by some\n");
+		default:
+			return res;
+	};
 }
 
 /* Callbacks */
 status_t AesInputDevice::bulk_transfer(int direction, unsigned char *data, size_t size)
 {
-	BUSBEndpoint *dir = (direction == AES2501_OUT ? this->dev_data.pipe_out
+	BUSBEndpoint *dir = (direction == AES2501_OUT ? dev_data.pipe_out
 											  	  : dev_data.pipe_in);
+	ssize_t res;
 
-	if (dir->BulkTransfer(data, size) != size)
-		return B_ERROR;
+	if ((res = dir->BulkTransfer(data, size)) != size)
+		if (res < size) {
+			if (direction == AES2501_IN)
+				PRINT("request %lu bytes, but got %lu bytes.\n", size, res);
+			return B_DEV_FIFO_UNDERRUN;
+		}
+		else return B_DEV_FIFO_OVERRUN;
 
 	if (dir->IsStalled())
 		return B_DEV_STALLED;
@@ -248,6 +309,6 @@ status_t AesInputDevice::bulk_transfer(int direction, unsigned char *data, size_
 }
 status_t AesInputDevice::clear_stall()
 {
-	return this->dev_data.pipe_out->ClearStall();
+	return dev_data.pipe_out->ClearStall();
 }
 /* */
