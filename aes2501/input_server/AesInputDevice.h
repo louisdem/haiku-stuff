@@ -36,7 +36,7 @@ enum {
 	AES_SECOND_BUTTON,
 	AES_THIRD_BUTTON
 };
-enum {
+enum state {
 	AES_DETECT_FINGER,
 	AES_BREAK_LOOP
 };

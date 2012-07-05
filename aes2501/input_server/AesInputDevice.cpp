@@ -198,7 +198,9 @@ status_t AesInputDevice::InitThread()
 status_t AesInputDevice::EmulatedInterrupt()
 {
 	unsigned char histgr[44];
-	int state = AES_DETECT_FINGER, sum, i;
+	int sum, i;
+	state s = AES_DETECT_FINGER;
+	status_t res;
 
 	const pairs cmd[] = {
 	{ AES2501_REG_CTRL1, AES2501_CTRL1_MASTER_RESET },
@@ -230,11 +232,12 @@ status_t AesInputDevice::EmulatedInterrupt()
 
 	while (1)
 	{
-		switch (state) {
+		switch (s) {
 		case AES_DETECT_FINGER:
 			if (aes_usb_exec(&g_bulk_transfer, &g_clear_stall, false, cmd,
 				G_N_ELEMENTS(cmd)) != B_OK ||
-				aes_usb_read(histgr, 44 /* 20 */) != B_OK) // !
+				(res = aes_usb_read(histgr, 44 /* 20 */)) != B_OK
+				&& res != B_DEV_FIFO_UNDERRUN) // !
 				return 0;
 
 			sum = 0;
@@ -242,12 +245,12 @@ status_t AesInputDevice::EmulatedInterrupt()
 				sum += (histgr[i] & 0xf) + (histgr[i] >> 4);
 
 			if (sum > 20) {
-				state = AES_BREAK_LOOP;
+				s = AES_BREAK_LOOP;
 				break;
 			}
 		}
 
-		if (state == AES_BREAK_LOOP)
+		if (s == AES_BREAK_LOOP)
 			break;
 
 		snooze(POLL_INTERVAL);
