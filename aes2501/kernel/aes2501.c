@@ -9,6 +9,8 @@
 #include <device_manager.h>
 #include <USB3.h>
 
+//#define COMPACT_DRIVER 1
+
 //#define TRACE_AES 1
 #ifdef TRACE_AES
 #       define TRACE(x...) dprintf("aes2501: " x)
@@ -353,6 +355,7 @@ input_aes_init_driver(device_node *node, void **_driverCookie)
 		return B_ERROR;
 	}
 
+#ifndef COMPACT_DRIVER
 	if (!(buf =
 #if 0
 	calloc(126, 1)
@@ -389,6 +392,7 @@ input_aes_init_driver(device_node *node, void **_driverCookie)
 			dprintf("0x%x = 0x%x, ", i, buf[i]);
 #endif
 	free(buf);
+#endif
 	if (aes_usb_exec(&bulk_transfer, &clear_stall, true, cmd_4, G_N_ELEMENTS(cmd_4)) != B_OK) {
 		input_aes_uninit_driver(NULL);
 		return B_ERROR;
