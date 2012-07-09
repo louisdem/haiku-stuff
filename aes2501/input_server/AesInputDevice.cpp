@@ -79,7 +79,7 @@ AesInputDevice::InitCheck()
 
 	// simulate 'block with timeout'
 	if ((InitThread = spawn_thread(InitThreadProxy, "AES2501 Init", 50, this)) < B_OK ||
-		(EmulatedInterruptId = spawn_thread(EmulatedInterruptProxy, "AES2501 Poll",
+		(DeviceWatcherId = spawn_thread(DeviceWatcherProxy, "AES2501 Poll",
 		kPollThreadPriority, this)) < B_OK ||
 		send_data(InitThread, 0, NULL, 0) != B_OK) // pass main's thread id
 		return B_ERROR;
@@ -109,8 +109,7 @@ AesInputDevice::Start(const char *name, void *cookie)
 	/* Would be nice to do:
 		our_device->set_mouse_type(1); _/ */
 
-	settings->which_button = AES_SECOND_BUTTON;
-	_ReadSettings();
+	SetSettings();
 
 	/* \_ and:
 		if (settings->handle_click == true) {
@@ -120,14 +119,14 @@ AesInputDevice::Start(const char *name, void *cookie)
 		}
 		but Haiku allows only global mouse settings */
 
-	resume_thread(EmulatedInterruptId);
+	resume_thread(DeviceWatcherId);
 
 	return 0;
 }
 status_t
 AesInputDevice::Stop(const char *name, void *cookie)
 {
-	kill_thread(EmulatedInterruptId);
+	kill_thread(DeviceWatcherId);
 }
 
 status_t
@@ -145,15 +144,20 @@ AesUSBRoster::DeviceAdded(BUSBDevice *dev)
 void c------------------------------() {}
 */
 
-void AesInputDevice::_ReadSettings()
+void AesInputDevice::SetSettings()
 {
 	void *handle;
+
+	settings->which_button = 0x04;
 
 	// Driver Settings API isn't right to be used here, but whatever...
 	if ((handle = load_driver_settings("aes2501"))) {
 		const char *str = get_driver_parameter(handle, "bind_to_which_button", NULL, NULL);
-		if (str && (str[0] == '1' || str[0] == '2' || str[0] == '3'))
-			settings->which_button = atoi(str);
+		if (str)
+			if (str[0] == '1')
+				settings->which_button = 0x01;
+			else if (str[0] == '3')
+				settings->which_button = 0x02;
 	}
 	settings->handle_click = get_driver_boolean_parameter(handle, "handle_click", true, true);
 	settings->handle_scroll = get_driver_boolean_parameter(handle, "handle_scroll", true, true);
@@ -195,14 +199,29 @@ status_t AesInputDevice::InitThread()
 	return 0;
 }
 
-status_t AesInputDevice::EmulatedInterrupt()
+BMessage *AesInputDevice::PrepareMessage(int event)
 {
-	unsigned char histgr[44];
-	int sum, i;
+	// will be destroyed by EnqueueMessage()
+	BMessage *message = new BMessage(event);
+
+	message->AddInt32("x", 0);
+	message->AddInt32("y", 0);
+	message->AddInt32("buttons", settings->which_button);
+
+	return message;
+}
+
+status_t AesInputDevice::DeviceWatcher()
+{
+	bool instant = false;
 	state s = AES_DETECT_FINGER;
+
+	bool substate = false;
+	unsigned char buf[44];
+	int sum, i;
 	status_t res;
 
-	const pairs cmd[] = {
+	const pairs det_fp_cmd[] = {
 	{ AES2501_REG_CTRL1, AES2501_CTRL1_MASTER_RESET },
 	{ AES2501_REG_EXCITCTRL, 0x40 },
 	{ AES2501_REG_DETCTRL,
@@ -234,29 +253,59 @@ status_t AesInputDevice::EmulatedInterrupt()
 	{
 		switch (s) {
 		case AES_DETECT_FINGER:
-			if (aes_usb_exec(&g_bulk_transfer, &g_clear_stall, false, cmd,
-				G_N_ELEMENTS(cmd)) != B_OK ||
-				(res = aes_usb_read(histgr, 44 /* 20 */)) != B_OK
-				&& res != B_DEV_FIFO_UNDERRUN) // !
+			if (aes_usb_exec(&g_bulk_transfer, &g_clear_stall, false, det_fp_cmd,
+				G_N_ELEMENTS(det_fp_cmd)) != B_OK ||
+				(res = aes_usb_read(buf, 44 /* 20 */)) != B_OK // !
+				&& res != B_DEV_FIFO_UNDERRUN)
 				return 0;
 
 			sum = 0;
+			// examine histogram
 			for (i = 1; i < 9; i++)
-				sum += (histgr[i] & 0xf) + (histgr[i] >> 4);
+				sum += (buf[i] & 0xf) + (buf[i] >> 4);
 
 			if (sum > 20) {
-				s = AES_BREAK_LOOP;
-				break;
+				// fast handle of touch
+				if (!settings->handle_scroll) {
+					if (!substate) {
+						s = AES_MOUSE_DOWN;
+						instant = true;
+					}
+				} else {
+					s = AES_RUN_CAPTURE;
+					instant = true;
+				}
 			}
+			else if (substate) {
+				s = AES_MOUSE_UP;
+				substate = 0;
+				instant = true;
+			}
+		break;
+		case AES_RUN_CAPTURE:
+			;
+		break;
+		case AES_MOUSE_DOWN:
+			EnqueueMessage(PrepareMessage(B_MOUSE_DOWN));
+
+			s = AES_DETECT_FINGER;
+			substate = 1;
+			instant = false;
+		break;
+		case AES_MOUSE_UP:
+			EnqueueMessage(PrepareMessage(B_MOUSE_UP));
+
+			s = AES_DETECT_FINGER;
+			instant = false;
+		break;
 		}
 
 		if (s == AES_BREAK_LOOP)
 			break;
 
-		snooze(POLL_INTERVAL);
+		if (!instant)
+			snooze(POLL_INTERVAL);
 	}
-
-	PRINT("Exiting\n");
 }
 
 status_t AesInputDevice::aes_setup_pipes(const BUSBInterface *uii)

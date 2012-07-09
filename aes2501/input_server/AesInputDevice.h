@@ -9,7 +9,7 @@
 #include <Entry.h>
 #include <driver_settings.h>
 
-#define POLL_INTERVAL 1000
+#define POLL_INTERVAL 3000000
 
 #define PRINT_AES 1
 #ifdef PRINT_AES
@@ -31,19 +31,17 @@ extern "C" _EXPORT BInputServerDevice* instantiate_input_device();
 extern "C" status_t aes_usb_exec(status_t (*bulk_transfer)(int, unsigned char *, size_t),
 	status_t (*clear_stall)(), bool strict, const pairs *cmd, unsigned int num);
 
-enum {
-	AES_FIRST_BUTTON = 1,
-	AES_SECOND_BUTTON,
-	AES_THIRD_BUTTON
-};
 enum state {
 	AES_DETECT_FINGER,
+	AES_RUN_CAPTURE,
+	AES_MOUSE_DOWN,
+	AES_MOUSE_UP,
 	AES_BREAK_LOOP
 };
 typedef struct {
+	int8 which_button;
 	bool handle_click,
 		 handle_scroll;
-	int which_button;
 } AesSettings;
 
 class AesInputDevice;
@@ -57,23 +55,24 @@ class AesInputDevice: public BInputServerDevice {
 					 *pipe_out;
 	} dev_data;
 	AesSettings *settings;
-	thread_id EmulatedInterruptId;
+	thread_id DeviceWatcherId;
 public:
 	AesInputDevice();
 	virtual ~AesInputDevice();
 private:
-	void _ReadSettings();
+	void SetSettings();
 	status_t InitThread();
-	status_t EmulatedInterrupt();
+	BMessage *PrepareMessage(int);
+	status_t DeviceWatcher();
 	static status_t InitThreadProxy(void *_this)
 	{
 		AesInputDevice *dev = (AesInputDevice *) _this;
 		return dev->InitThread();
 	}
-	static status_t EmulatedInterruptProxy(void *_this)
+	static status_t DeviceWatcherProxy(void *_this)
 	{
 		AesInputDevice *dev = (AesInputDevice *) _this;
-		return dev->EmulatedInterrupt();
+		return dev->DeviceWatcher();
 	}
 	status_t aes_setup_pipes(const BUSBInterface *);
 	status_t aes_usb_read(unsigned char* const, size_t);
