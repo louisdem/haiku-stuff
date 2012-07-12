@@ -11,6 +11,8 @@
 
 #define POLL_INTERVAL 3000000
 
+#define MAX_FRAMES 150
+
 #define PRINT_AES 1
 #ifdef PRINT_AES
 	inline void _iprint(const char* fmt, ...) {
@@ -34,10 +36,31 @@ extern "C" status_t aes_usb_exec(status_t (*bulk_transfer)(int, unsigned char *,
 enum state {
 	AES_DETECT_FINGER,
 	AES_RUN_CAPTURE,
+	AES_STRIP_SCAN,
 	AES_MOUSE_DOWN,
 	AES_MOUSE_UP,
 	AES_BREAK_LOOP
 };
+
+enum aes2501_regs {
+	AES2501_REG_IMAGCTRL = 0x98, /* image data */
+/* don't send image or authentication messages when imaging */
+#define AES2501_IMAGCTRL_IMG_DATA_DISABLE	0x01
+/* send histogram when imaging */
+#define AES2501_IMAGCTRL_HISTO_DATA_ENABLE	0x02
+	AES2501_REG_CHWORD1 = 0x9b, /* challenge word 1 */
+	AES2501_REG_CHWORD2 = 0x9c,
+	AES2501_REG_CHWORD3 = 0x9d,
+	AES2501_REG_CHWORD4 = 0x9e,
+	AES2501_REG_CHWORD5 = 0x9f,
+};
+enum aes2501_sensor_gain1 {
+	AES2501_CHANGAIN_STAGE1_2X	= 0x00,
+};
+enum aes2501_sensor_gain2 {
+	AES2501_CHANGAIN_STAGE2_2X	= 0x00,
+};
+
 typedef struct {
 	int8 which_button;
 	bool handle_click,

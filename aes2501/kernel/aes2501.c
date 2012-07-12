@@ -281,7 +281,7 @@ input_aes_init_driver(device_node *node, void **_driverCookie)
 	{ AES2501_REG_ADREFLO, 0x34 },
 	{ AES2501_REG_STRTCOL, 0x16 },
 	{ AES2501_REG_ENDCOL, 0x16 },
-	{ 0xff, 0x00 }, //{ /*AES2501_REG_DATFMT*/ 0x97, /*AES2501_DATFMT_BIN_IMG*/ 0x10 | 0x08 },
+	{ 0xff, 0x00 }, //{ AES2501_REG_DATFMT, AES2501_DATFMT_BIN_IMG | 0x08 },
 	{ AES2501_REG_TREG1, 0x70 },
 	{ 0xa2, 0x02 },
 	{ 0xa7, 0x00 },
