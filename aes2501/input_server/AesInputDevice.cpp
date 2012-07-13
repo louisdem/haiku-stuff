@@ -3,6 +3,7 @@
 #include "AesInputDevice.h"
 
 const static uint32 kPollThreadPriority = B_FIRST_REAL_TIME_PRIORITY + 4;
+const static uint32 kPollInterval = 1000000 * 0.055;
 const static char *kAesInputDirectory = "/dev/input/aes2501";
 
 
@@ -48,7 +49,8 @@ AesInputDevice::InitCheck()
 		return B_ERROR;
 	}
 
-	URoster = new AesUSBRoster();
+	if (!(URoster = new AesUSBRoster()))
+		return B_ERROR;
 
 	/* dupe: We're doing a duplicate of what kernel driver did in it's init phase,
 	   because of two reasons: 1) someone may wish to adopt this project for
@@ -150,6 +152,7 @@ void AesInputDevice::SetSettings()
 
 	settings->which_button = 0x04;
 
+	// TO-DO: share common settings with Touchpad preflet
 	// Driver Settings API isn't right to be used here, but whatever...
 	if ((handle = load_driver_settings("aes2501"))) {
 		const char *str = get_driver_parameter(handle, "bind_to_which_button", NULL, NULL);
@@ -201,8 +204,9 @@ status_t AesInputDevice::InitThread()
 
 BMessage *AesInputDevice::PrepareMessage(int event)
 {
-	// will be destroyed by EnqueueMessage()
 	BMessage *message = new BMessage(event);
+	if (!message)
+		return NULL;
 
 	message->AddInt32("x", 0);
 	message->AddInt32("y", 0);
@@ -217,6 +221,7 @@ status_t AesInputDevice::DeviceWatcher()
 	state s = AES_DETECT_FINGER;
 	unsigned char buf[97];
 	int sum, i;
+	BMessage *message;
 
 	int substate = false;
 
@@ -285,7 +290,7 @@ status_t AesInputDevice::DeviceWatcher()
 	};
 	const pairs capture_cmd_2[] = {
 	{ AES2501_REG_IMAGCTRL,
-		/* return_test_registers_on_dump | */ AES2501_IMAGCTRL_HISTO_DATA_ENABLE |
+		/* -//- | */ AES2501_IMAGCTRL_HISTO_DATA_ENABLE |
 		AES2501_IMAGCTRL_IMG_DATA_DISABLE },
 	{ AES2501_REG_STRTCOL, 0x10 },
 	{ AES2501_REG_ENDCOL, 0x1f },
@@ -296,7 +301,7 @@ status_t AesInputDevice::DeviceWatcher()
 	};
 	const pairs strip_scan_cmd[] = {
 	{ AES2501_REG_IMAGCTRL,
-		/* return_test_registers_on_dump | */ AES2501_IMAGCTRL_HISTO_DATA_ENABLE |
+		/* -//- | */ AES2501_IMAGCTRL_HISTO_DATA_ENABLE |
 		AES2501_IMAGCTRL_IMG_DATA_DISABLE  /* we don't need image here */ },
 	{ AES2501_REG_STRTCOL, 0x00 },
 	{ AES2501_REG_ENDCOL, 0x2f },
@@ -315,7 +320,7 @@ status_t AesInputDevice::DeviceWatcher()
 				return 0;
 
 			sum = 0;
-			// examine histogram to detect finger
+			// examine histogram
 			for (i = 1; i < 9; i++)
 				sum += (buf[i] & 0xf) + (buf[i] >> 4);
 
@@ -362,7 +367,7 @@ status_t AesInputDevice::DeviceWatcher()
 			sum = 0;
 			// binded to little-endian machine
 			histogram = (uint16 *)(buf + 1);
-			for (i = 10; i < 16; i++)
+			for (i = /* get_threshold_from_dump() */ 10; i < 16; i++)
 				sum += histogram[i];
 			if (sum < 0) {
 				// non fatal
@@ -383,14 +388,18 @@ status_t AesInputDevice::DeviceWatcher()
 			break;
 		break;
 		case AES_MOUSE_DOWN:
-			EnqueueMessage(PrepareMessage(B_MOUSE_DOWN));
+			if (!(message = PrepareMessage(B_MOUSE_DOWN)))
+				return 0;
+			EnqueueMessage(message);
 
 			s = AES_DETECT_FINGER;
 			substate = 1;
 			instant = false;
 		break;
 		case AES_MOUSE_UP:
-			EnqueueMessage(PrepareMessage(B_MOUSE_UP));
+			if (!(message = PrepareMessage(B_MOUSE_UP)))
+				return 0;
+			EnqueueMessage(message);
 
 			s = AES_DETECT_FINGER;
 			instant = false;
@@ -403,7 +412,7 @@ status_t AesInputDevice::DeviceWatcher()
 		}
 
 		if (!instant)
-			snooze(POLL_INTERVAL);
+			snooze(kPollInterval);
 	}
 }
 

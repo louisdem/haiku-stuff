@@ -392,7 +392,7 @@ input_aes_init_driver(device_node *node, void **_driverCookie)
 			dprintf("0x%x = 0x%x, ", i, buf[i]);
 #endif
 	free(buf);
-#endif
+#endif // COMPACT_DRIVER
 	if (aes_usb_exec(&bulk_transfer, &clear_stall, true, cmd_4, G_N_ELEMENTS(cmd_4)) != B_OK) {
 		input_aes_uninit_driver(NULL);
 		return B_ERROR;

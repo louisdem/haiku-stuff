@@ -9,8 +9,6 @@
 #include <Entry.h>
 #include <driver_settings.h>
 
-#define POLL_INTERVAL 3000000
-
 #define MAX_FRAMES 150
 
 #define PRINT_AES 1
