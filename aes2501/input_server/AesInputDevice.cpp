@@ -202,9 +202,9 @@ status_t AesInputDevice::InitThread()
 	return 0;
 }
 
-BMessage *AesInputDevice::PrepareMessage(int event)
+BMessage *AesInputDevice::PrepareMessage()
 {
-	BMessage *message = new BMessage(event);
+	BMessage *message = new BMessage();
 	if (!message)
 		return NULL;
 
@@ -219,7 +219,16 @@ status_t AesInputDevice::DeviceWatcher()
 {
 	bool instant = false;
 	state s = AES_DETECT_FINGER;
-	unsigned char buf[97];
+
+	int threshold;
+	unsigned char buf[
+#ifndef COMPACT_DRIVER
+	159], *data;
+	threshold = 0;
+#else
+	97];
+	threshold = 8;
+#endif
 	int sum, i;
 	BMessage *message;
 
@@ -277,7 +286,7 @@ status_t AesInputDevice::DeviceWatcher()
 	{ 0xb7, 0x1a },
 	{ AES2501_REG_CTRL1, AES2501_CTRL1_REG_UPDATE },
 	{ AES2501_REG_IMAGCTRL,
-		/* return_test_registers_on_dump | */ AES2501_IMAGCTRL_HISTO_DATA_ENABLE |
+		AES2501_IMAGCTRL_TST_REG_ENABLE | AES2501_IMAGCTRL_HISTO_DATA_ENABLE |
 		AES2501_IMAGCTRL_IMG_DATA_DISABLE },
 	{ AES2501_REG_STRTCOL, 0x10 },
 	{ AES2501_REG_ENDCOL, 0x1f },
@@ -290,7 +299,7 @@ status_t AesInputDevice::DeviceWatcher()
 	};
 	const pairs capture_cmd_2[] = {
 	{ AES2501_REG_IMAGCTRL,
-		/* -//- | */ AES2501_IMAGCTRL_HISTO_DATA_ENABLE |
+		AES2501_IMAGCTRL_TST_REG_ENABLE | AES2501_IMAGCTRL_HISTO_DATA_ENABLE |
 		AES2501_IMAGCTRL_IMG_DATA_DISABLE },
 	{ AES2501_REG_STRTCOL, 0x10 },
 	{ AES2501_REG_ENDCOL, 0x1f },
@@ -301,7 +310,10 @@ status_t AesInputDevice::DeviceWatcher()
 	};
 	const pairs strip_scan_cmd[] = {
 	{ AES2501_REG_IMAGCTRL,
-		/* -//- | */ AES2501_IMAGCTRL_HISTO_DATA_ENABLE |
+#ifndef COMPACT_DRIVER
+		AES2501_IMAGCTRL_TST_REG_ENABLE |
+#endif
+		AES2501_IMAGCTRL_HISTO_DATA_ENABLE |
 		AES2501_IMAGCTRL_IMG_DATA_DISABLE  /* we don't need image here */ },
 	{ AES2501_REG_STRTCOL, 0x00 },
 	{ AES2501_REG_ENDCOL, 0x2f },
@@ -341,34 +353,44 @@ status_t AesInputDevice::DeviceWatcher()
 				substate = 0;
 				instant = true;
 			}
+
+			if (s == AES_MOUSE_DOWN || s == AES_MOUSE_UP)
+				if (!(message = PrepareMessage()))
+					return 0;
 		break;
 		case AES_RUN_CAPTURE:
 			if (aes_usb_exec(&g_bulk_transfer, &g_clear_stall, false, capture_cmd_1,
-				G_N_ELEMENTS(capture_cmd_1)) != B_OK || aes_usb_read(NULL, 97) != B_OK ||
+				G_N_ELEMENTS(capture_cmd_1)) != B_OK || aes_usb_read(NULL, 159) != B_OK ||
 				aes_usb_exec(&g_bulk_transfer, &g_clear_stall, false, capture_cmd_2,
-				G_N_ELEMENTS(capture_cmd_2)) != B_OK || aes_usb_read(NULL, 97) != B_OK)
+				G_N_ELEMENTS(capture_cmd_2)) != B_OK || aes_usb_read(NULL, 159) != B_OK)
 				return 0;
 
 			s = AES_STRIP_SCAN;
 		break;
 		case AES_STRIP_SCAN:
 			if (aes_usb_exec(&g_bulk_transfer, &g_clear_stall, true, strip_scan_cmd,
-				G_N_ELEMENTS(strip_scan_cmd)) != B_OK || aes_usb_read(buf, 97) != B_OK) {
-				s = AES_BREAK_LOOP;
+				G_N_ELEMENTS(strip_scan_cmd)) != B_OK || aes_usb_read(buf,
+#ifndef COMPACT_DRIVER
+				159) != B_OK)
+				return 0;
+
+			if (!threshold) {
+				s = AES_GET_CAPS;
 				break;
 			}
-
+#else
+				97) != B_OK)
+				return 0;
+#endif
 			if (*buf != 0xde) {
 				PRINT("didn't receive proper histogram\n");
-
-				s = AES_BREAK_LOOP;
-				break;
+				return 0;
 			}
 			sum = 0;
 			// binded to little-endian machine
 			histogram = (uint16 *)(buf + 1);
-			for (i = /* get_threshold_from_dump() */ 10; i < 16; i++)
-				sum += histogram[i];
+			for (i = threshold; i < 16; i++)
+				sum += histogram[i] * 0.01;
 			if (sum < 0) {
 				// non fatal
 				s = AES_DETECT_FINGER;
@@ -384,12 +406,26 @@ status_t AesInputDevice::DeviceWatcher()
 			}
 
 			PRINT("sum: 0, substate: %d\n", substate);
-			s = AES_BREAK_LOOP;
-			break;
+			return 0;
 		break;
-		case AES_MOUSE_DOWN:
-			if (!(message = PrepareMessage(B_MOUSE_DOWN)))
+#ifndef COMPACT_DRIVER
+		case AES_GET_CAPS:
+			data = buf + 1 + 16*2;
+			if (*data != AES2501_REG_CTRL1 /* = FIRST_AES2501_REG */) {
+				PRINT("not a register dump\n");
 				return 0;
+			}
+			if ((threshold =
+				data[(AES2501_REG_DATFMT - AES2501_REG_CTRL1 /* = -//- */) * 2 + 1]) < 0)
+				return 0;
+			if ((threshold &= 0x0f) > 0x0f)
+				threshold = 8;
+
+			s = AES_STRIP_SCAN;
+		break;
+#endif
+		case AES_MOUSE_DOWN:
+			message->what = B_MOUSE_DOWN;
 			EnqueueMessage(message);
 
 			s = AES_DETECT_FINGER;
@@ -397,18 +433,12 @@ status_t AesInputDevice::DeviceWatcher()
 			instant = false;
 		break;
 		case AES_MOUSE_UP:
-			if (!(message = PrepareMessage(B_MOUSE_UP)))
-				return 0;
+			message->what = B_MOUSE_UP;
 			EnqueueMessage(message);
 
 			s = AES_DETECT_FINGER;
 			instant = false;
 		break;
-		}
-
-		if (s == AES_BREAK_LOOP) {
-			PRINT("Exiting\n");
-			break;
 		}
 
 		if (!instant)

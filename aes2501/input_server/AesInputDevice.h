@@ -9,6 +9,8 @@
 #include <Entry.h>
 #include <driver_settings.h>
 
+#define COMPACT_DRIVER 1
+
 #define MAX_FRAMES 150
 
 #define PRINT_AES 1
@@ -35,17 +37,20 @@ enum state {
 	AES_DETECT_FINGER,
 	AES_RUN_CAPTURE,
 	AES_STRIP_SCAN,
+	AES_GET_CAPS,
 	AES_MOUSE_DOWN,
 	AES_MOUSE_UP,
-	AES_BREAK_LOOP
 };
 
 enum aes2501_regs {
+	AES2501_REG_DATFMT = 0x97, /* data format */
 	AES2501_REG_IMAGCTRL = 0x98, /* image data */
 /* don't send image or authentication messages when imaging */
 #define AES2501_IMAGCTRL_IMG_DATA_DISABLE	0x01
 /* send histogram when imaging */
 #define AES2501_IMAGCTRL_HISTO_DATA_ENABLE	0x02
+/* return test registers with register dump */
+#define AES2501_IMAGCTRL_TST_REG_ENABLE		0x20
 	AES2501_REG_CHWORD1 = 0x9b, /* challenge word 1 */
 	AES2501_REG_CHWORD2 = 0x9c,
 	AES2501_REG_CHWORD3 = 0x9d,
@@ -83,7 +88,7 @@ public:
 private:
 	void SetSettings();
 	status_t InitThread();
-	BMessage *PrepareMessage(int);
+	BMessage *PrepareMessage();
 	status_t DeviceWatcher();
 	static status_t InitThreadProxy(void *_this)
 	{
