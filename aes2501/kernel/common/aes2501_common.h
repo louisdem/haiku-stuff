@@ -32,6 +32,8 @@ enum aes2501_regs_common {
 	AES2501_REG_ADREFLO = 0x92, /* A/D reference low */
 	AES2501_REG_STRTCOL = 0x95, /* start column */
 	AES2501_REG_ENDCOL = 0x96, /* end column */
+	AES2501_REG_DATFMT = 0x97, /* data format */
+#define AES2501_DATFMT_BIN_IMG	0x10
 	AES2501_REG_TREG1 = 0xa1, /* test register 1 */
 	AES2501_REG_TREGC = 0xac,
 /* Enable the reading of the register in TREGD */

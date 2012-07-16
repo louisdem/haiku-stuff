@@ -220,21 +220,16 @@ status_t AesInputDevice::DeviceWatcher()
 	bool instant = false;
 	state s = AES_DETECT_FINGER;
 
-	int threshold;
-	unsigned char buf[
-#ifndef COMPACT_DRIVER
-	159], *data;
-	threshold = 0;
-#else
-	97];
-	threshold = 8;
-#endif
-	int sum, i;
+	int substate = false, sum, i;
+	unsigned char *buf;
+
 	BMessage *message;
 
-	int substate = false;
-
+	int threshold;
+	unsigned char *data;
 	uint16 *histogram;
+
+	unsigned char *pthreshold;
 
 	const pairs det_fp_cmd[] = {
 	{ AES2501_REG_CTRL1, AES2501_CTRL1_MASTER_RESET },
@@ -252,7 +247,7 @@ status_t AesInputDevice::DeviceWatcher()
 	{ AES2501_REG_ADREFLO, 0x34 },
 	{ AES2501_REG_STRTCOL, 0x16 },
 	{ AES2501_REG_ENDCOL, 0x16 },
-	{ 0xff, 0x00 }, //{...image data format...},
+	{ AES2501_REG_DATFMT, AES2501_DATFMT_BIN_IMG | 0x08 }, // {0xff,0x00},
 	{ AES2501_REG_TREG1, 0x70 },
 	{ 0xa2, 0x02 },
 	{ 0xa7, 0x00 },
@@ -313,8 +308,7 @@ status_t AesInputDevice::DeviceWatcher()
 #ifndef COMPACT_DRIVER
 		AES2501_IMAGCTRL_TST_REG_ENABLE |
 #endif
-		AES2501_IMAGCTRL_HISTO_DATA_ENABLE |
-		AES2501_IMAGCTRL_IMG_DATA_DISABLE  /* we don't need image here */ },
+		AES2501_IMAGCTRL_HISTO_DATA_ENABLE /* | AES2501_IMAGCTRL_IMG_DATA_DISABLE */ },
 	{ AES2501_REG_STRTCOL, 0x00 },
 	{ AES2501_REG_ENDCOL, 0x2f },
 	{ AES2501_REG_CHANGAIN, AES2501_CHANGAIN_STAGE1_16X },
@@ -323,16 +317,34 @@ status_t AesInputDevice::DeviceWatcher()
 	{ AES2501_REG_CTRL2, AES2501_CTRL2_SET_ONE_SHOT },
 	};
 
+
+	if (settings->handle_scroll) {
+		buf = (unsigned char *) malloc(
+#ifndef COMPACT_DRIVER
+			1705 /* 159 */);
+			threshold = 0;
+#else
+			1643 /* 97 */);
+			threshold = 8;
+#endif
+		data = buf + 1 + 192*8 /* = buf */;
+		histogram = (uint16 *)(data + 1);
+		pthreshold = data + 1 + 16*2 + 1 + 8; /* buf + 1 + 16*2 */
+	}
+	else {
+		unsigned char histgr[20 /* 44 */];
+		buf = &histgr[0];
+	}
+
 	while (1)
 	{
 		switch (s) {
 		case AES_DETECT_FINGER:
 			if (aes_usb_exec(&g_bulk_transfer, &g_clear_stall, false, det_fp_cmd,
-				G_N_ELEMENTS(det_fp_cmd)) != B_OK || aes_usb_read(buf, 44 /* 20 */) != B_OK /* ! */)
+				G_N_ELEMENTS(det_fp_cmd)) != B_OK || aes_usb_read(buf, 20 /* 44 */) != B_OK)
 				return 0;
 
 			sum = 0;
-			// examine histogram
 			for (i = 1; i < 9; i++)
 				sum += (buf[i] & 0xf) + (buf[i] >> 4);
 
@@ -371,26 +383,32 @@ status_t AesInputDevice::DeviceWatcher()
 			if (aes_usb_exec(&g_bulk_transfer, &g_clear_stall, true, strip_scan_cmd,
 				G_N_ELEMENTS(strip_scan_cmd)) != B_OK || aes_usb_read(buf,
 #ifndef COMPACT_DRIVER
-				159) != B_OK)
-				return 0;
+				1705 /* 159 */) != B_OK) {
+				s = AES_BREAK_LOOP;
+				break;
+			}
 
 			if (!threshold) {
 				s = AES_GET_CAPS;
 				break;
 			}
 #else
-				97) != B_OK)
-				return 0;
+				1643 /* 97 */) != B_OK) {
+				s = AES_BREAK_LOOP;
+				break;
+			}
 #endif
-			if (*buf != 0xde) {
+			if (*data != 0xde) {
 				PRINT("didn't receive proper histogram\n");
-				return 0;
+
+				s = AES_BREAK_LOOP;
+				break;
 			}
 			sum = 0;
 			// binded to little-endian machine
-			histogram = (uint16 *)(buf + 1);
 			for (i = threshold; i < 16; i++)
-				sum += histogram[i] * 0.01;
+				sum += histogram[i];
+
 			if (sum < 0) {
 				// non fatal
 				s = AES_DETECT_FINGER;
@@ -406,17 +424,15 @@ status_t AesInputDevice::DeviceWatcher()
 			}
 
 			PRINT("sum: 0, substate: %d\n", substate);
-			return 0;
+			s = AES_BREAK_LOOP;
 		break;
 #ifndef COMPACT_DRIVER
 		case AES_GET_CAPS:
-			data = buf + 1 + 16*2;
-			if (*data != AES2501_REG_CTRL1 /* = FIRST_AES2501_REG */) {
+			if (*pthreshold != AES2501_REG_CTRL1 /* = FIRST_AES2501_REG */) {
 				PRINT("not a register dump\n");
 				return 0;
 			}
-			if ((threshold =
-				data[(AES2501_REG_DATFMT - AES2501_REG_CTRL1 /* = -//- */) * 2 + 1]) < 0)
+			if ((threshold = pthreshold[GET_THRESHOLD]) < 0)
 				return 0;
 			if ((threshold &= 0x0f) > 0x0f)
 				threshold = 8;
@@ -441,9 +457,15 @@ status_t AesInputDevice::DeviceWatcher()
 		break;
 		}
 
+		if (s == AES_BREAK_LOOP)
+			break;
+
 		if (!instant)
 			snooze(kPollInterval);
 	}
+
+	if (settings->handle_scroll && buf)
+		free(buf);
 }
 
 status_t AesInputDevice::aes_setup_pipes(const BUSBInterface *uii)
@@ -480,7 +502,8 @@ status_t AesInputDevice::aes_usb_read(unsigned char* const buf, size_t size)
 			// if (!buf)
 				return B_OK;
 		case B_DEV_FIFO_OVERRUN:
-			debug_printf("aes2501: data overrun. please bump aes_usb_read(buf, [value] by some\n");
+			debug_printf("aes2501: data overrun."
+			/*please bump aes_usb_read(buf, [value] by some*/ "\n");
 		default:
 			return res;
 	};

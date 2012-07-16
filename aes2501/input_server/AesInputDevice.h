@@ -12,6 +12,7 @@
 #define COMPACT_DRIVER 1
 
 #define MAX_FRAMES 150
+#define GET_THRESHOLD (AES2501_REG_DATFMT - AES2501_REG_CTRL1) * 2 + 1
 
 #define PRINT_AES 1
 #ifdef PRINT_AES
@@ -40,10 +41,10 @@ enum state {
 	AES_GET_CAPS,
 	AES_MOUSE_DOWN,
 	AES_MOUSE_UP,
+	AES_BREAK_LOOP
 };
 
 enum aes2501_regs {
-	AES2501_REG_DATFMT = 0x97, /* data format */
 	AES2501_REG_IMAGCTRL = 0x98, /* image data */
 /* don't send image or authentication messages when imaging */
 #define AES2501_IMAGCTRL_IMG_DATA_DISABLE	0x01

@@ -281,7 +281,7 @@ input_aes_init_driver(device_node *node, void **_driverCookie)
 	{ AES2501_REG_ADREFLO, 0x34 },
 	{ AES2501_REG_STRTCOL, 0x16 },
 	{ AES2501_REG_ENDCOL, 0x16 },
-	{ 0xff, 0x00 }, //{ AES2501_REG_DATFMT, AES2501_DATFMT_BIN_IMG | 0x08 },
+	{ AES2501_REG_DATFMT, AES2501_DATFMT_BIN_IMG | 0x08 }, // {0xff,0x00},
 	{ AES2501_REG_TREG1, 0x70 },
 	{ 0xa2, 0x02 },
 	{ 0xa7, 0x00 },
@@ -348,7 +348,7 @@ input_aes_init_driver(device_node *node, void **_driverCookie)
 
 	if ((input_aes->lock = create_sem(0, "lock")) < 0 ||
 		aes_usb_exec(&bulk_transfer, &clear_stall, true, cmd_1, G_N_ELEMENTS(cmd_1)) != B_OK ||
-		aes_usb_read(NULL, 44 /*20*/) != B_OK || // !
+		aes_usb_read(NULL, 20 /* 44 */) != B_OK ||
 		aes_usb_exec(&bulk_transfer, &clear_stall, true, cmd_2, G_N_ELEMENTS(cmd_2)) != B_OK
 	) {
 		input_aes_uninit_driver(NULL);
@@ -566,7 +566,8 @@ static status_t aes_usb_read(unsigned char* const buf, size_t size)
 		if (input_aes->transfer.status == B_DEV_FIFO_UNDERRUN)
 			return B_OK;
 		if (input_aes->transfer.status == B_DEV_FIFO_OVERRUN)
-			dprintf("aes2501: data overrun. please bump aes_usb_read(NULL, [value] by some\n");
+			dprintf("aes2501: data overrun."
+			/*please bump aes_usb_read(NULL, [value] by some*/ "\n");
 	}
 
 	return B_ERROR;
