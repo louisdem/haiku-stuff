@@ -229,7 +229,7 @@ status_t AesInputDevice::DeviceWatcher()
 	unsigned char *data;
 	uint16 *histogram;
 
-	unsigned char *pthreshold;
+	unsigned char *pthres;
 
 	const pairs det_fp_cmd[] = {
 	{ AES2501_REG_CTRL1, AES2501_CTRL1_MASTER_RESET },
@@ -319,17 +319,19 @@ status_t AesInputDevice::DeviceWatcher()
 
 
 	if (settings->handle_scroll) {
-		buf = (unsigned char *) malloc(
+		if (!(buf = (unsigned char *) malloc(
 #ifndef COMPACT_DRIVER
-			1705 /* 159 */);
+			1705 /* 159 */)))
+			return 0;
 			threshold = 0;
 #else
-			1643 /* 97 */);
+			1643 /* 97 */)))
+			return 0;
 			threshold = 8;
 #endif
 		data = buf + 1 + 192*8 /* = buf */;
 		histogram = (uint16 *)(data + 1);
-		pthreshold = data + 1 + 16*2 + 1 + 8; /* buf + 1 + 16*2 */
+		pthres = data + 1 + 16*2 + 1 + 8; /* buf + 1 + 16*2 */
 	}
 	else {
 		unsigned char histgr[20 /* 44 */];
@@ -341,8 +343,10 @@ status_t AesInputDevice::DeviceWatcher()
 		switch (s) {
 		case AES_DETECT_FINGER:
 			if (aes_usb_exec(&g_bulk_transfer, &g_clear_stall, false, det_fp_cmd,
-				G_N_ELEMENTS(det_fp_cmd)) != B_OK || aes_usb_read(buf, 20 /* 44 */) != B_OK)
-				return 0;
+				G_N_ELEMENTS(det_fp_cmd)) != B_OK || aes_usb_read(buf, 20 /* 44 */) != B_OK) {
+				s = AES_BREAK_LOOP;
+				break;
+			}
 
 			sum = 0;
 			for (i = 1; i < 9; i++)
@@ -367,15 +371,19 @@ status_t AesInputDevice::DeviceWatcher()
 			}
 
 			if (s == AES_MOUSE_DOWN || s == AES_MOUSE_UP)
-				if (!(message = PrepareMessage()))
-					return 0;
+				if (!(message = PrepareMessage())) {
+					s = AES_BREAK_LOOP;
+					break;
+				}
 		break;
 		case AES_RUN_CAPTURE:
 			if (aes_usb_exec(&g_bulk_transfer, &g_clear_stall, false, capture_cmd_1,
 				G_N_ELEMENTS(capture_cmd_1)) != B_OK || aes_usb_read(NULL, 159) != B_OK ||
 				aes_usb_exec(&g_bulk_transfer, &g_clear_stall, false, capture_cmd_2,
-				G_N_ELEMENTS(capture_cmd_2)) != B_OK || aes_usb_read(NULL, 159) != B_OK)
-				return 0;
+				G_N_ELEMENTS(capture_cmd_2)) != B_OK || aes_usb_read(NULL, 159) != B_OK) {
+					s = AES_BREAK_LOOP;
+					break;
+				}
 
 			s = AES_STRIP_SCAN;
 		break;
@@ -418,7 +426,7 @@ status_t AesInputDevice::DeviceWatcher()
 			}
 
 			substate++;
-			if (sum > 0 /*&& substate < MAX_FRAMES*/) {
+			if (sum > 0 /* && substate < MAX_FRAMES */) {
 				PRINT("sum: %d\n", sum);
 				break;
 			}
@@ -428,12 +436,16 @@ status_t AesInputDevice::DeviceWatcher()
 		break;
 #ifndef COMPACT_DRIVER
 		case AES_GET_CAPS:
-			if (*pthreshold != AES2501_REG_CTRL1 /* = FIRST_AES2501_REG */) {
+			if (*pthres != AES2501_REG_CTRL1 /* = FIRST_AES2501_REG */) {
 				PRINT("not a register dump\n");
-				return 0;
+
+				s = AES_BREAK_LOOP;
+				break;
 			}
-			if ((threshold = pthreshold[GET_THRESHOLD]) < 0)
-				return 0;
+			if ((threshold = pthreshold[GET_THRESHOLD]) < 0) {
+				s = AES_BREAK_LOOP;
+				break;
+			}
 			if ((threshold &= 0x0f) > 0x0f)
 				threshold = 8;
 
