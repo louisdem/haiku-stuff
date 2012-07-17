@@ -86,7 +86,7 @@ AesInputDevice::InitCheck()
 		send_data(InitThread, 0, NULL, 0) != B_OK) // pass main's thread id
 		return B_ERROR;
 	resume_thread(InitThread);
-	timeout = 4500; // bump up, if added code into InitThread() or subcalls
+	timeout = 5000; // bump up, if added code into InitThread() or subcalls
 	start = system_time();
 	while(!has_data(InitThread)) {
 		if ((system_time() - start) > timeout) {
@@ -426,13 +426,16 @@ status_t AesInputDevice::DeviceWatcher()
 			}
 
 			substate++;
-			if (sum > 0 /* && substate < MAX_FRAMES */) {
+			if (sum > 0 && substate < MAX_FRAMES) {
 				PRINT("sum: %d\n", sum);
 				break;
 			}
 
 			PRINT("sum: 0, substate: %d\n", substate);
-			s = AES_BREAK_LOOP;
+
+			s = AES_DETECT_FINGER;
+			substate = false;
+			instant = false;
 		break;
 #ifndef COMPACT_DRIVER
 		case AES_GET_CAPS:
@@ -442,7 +445,7 @@ status_t AesInputDevice::DeviceWatcher()
 				s = AES_BREAK_LOOP;
 				break;
 			}
-			if ((threshold = pthreshold[GET_THRESHOLD]) < 0) {
+			if ((threshold = pthres[GET_THRESHOLD]) < 0) {
 				s = AES_BREAK_LOOP;
 				break;
 			}
