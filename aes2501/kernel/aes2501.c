@@ -42,8 +42,7 @@ typedef struct {
 /* bypass device/driver separation */
 typedef struct {
 	struct {
-		usb_pipe pipe_in,
-				 pipe_out;
+		usb_pipe pipe_in, pipe_out;
 	} device;
 	struct {
 		status_t status;
@@ -541,43 +540,38 @@ static status_t aes_setup_pipes(const usb_interface_info *uii)
 static status_t aes_usb_read(unsigned char* const buf, size_t size)
 {
 	unsigned char *data;
-	size_t ret;
+	size_t res;
 
 	if (!(data = (buf ? buf : malloc(size)) ))
 		return B_ERROR;
-	if ((ret = bulk_transfer(AES2501_IN, data, size)) != B_OK &&
-		ret != B_DEV_FIFO_UNDERRUN && ret != B_DEV_FIFO_OVERRUN) {
-		if (!buf)
-			free(data);
-		return B_ERROR;
-	}
+	res = bulk_transfer(AES2501_IN, data, size);
 	if (!buf)
 		free(data);
 
-	if (ret == B_OK) {
-		if (buf && input_aes->transfer.actual_length != size) {
+	switch (res) {
+		case B_DEV_FIFO_UNDERRUN:
+			if (!buf)
+				return B_OK;
+		break;
+		case B_DEV_FIFO_OVERRUN:
+			if (!buf)
+				dprintf("aes2501: data overrun."
+				/*please bump aes_usb_read(NULL, [value] by some*/ "\n");
+		break;
+		case B_OK:
+			if (buf && input_aes->transfer.actual_length != size) {
 				TRACE("request %lu bytes, but got %lu bytes.\n", size,
 					input_aes->transfer.actual_length);
 				return B_ERROR;
-		}
-		return B_OK;
+			}
 	}
-	if (!buf) {
-		if (input_aes->transfer.status == B_DEV_FIFO_UNDERRUN)
-			return B_OK;
-		if (input_aes->transfer.status == B_DEV_FIFO_OVERRUN)
-			dprintf("aes2501: data overrun."
-			/*please bump aes_usb_read(NULL, [value] by some*/ "\n");
-	}
-
-	return B_ERROR;
+	return res;
 }
 
 /* Callbacks */
 static status_t bulk_transfer(int direction, unsigned char *data, size_t size)
 {
-	usb_pipe *dir = (direction == AES2501_OUT ? &input_aes->device.pipe_out
-											  : &input_aes->device.pipe_in);
+	usb_pipe *dir = (direction == AES2501_OUT ? &input_aes->device.pipe_out : &input_aes->device.pipe_in);
 	status_t ret;
 
 	if (input_aes_static.usb->queue_bulk(*dir, data, size, &aes_usb_transfer_callback,

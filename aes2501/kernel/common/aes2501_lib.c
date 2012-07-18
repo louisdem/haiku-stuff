@@ -63,8 +63,7 @@ status_t aes_usb_exec(status_t (*bulk_transfer)(), status_t (*clear_stall)(),
 					return B_ERROR;
 				break;
 			}
-			else if (res == B_BUSY || B_DEV_FIFO_UNDERRUN
-								   || B_DEV_FIFO_OVERRUN) {
+			else if (res == B_BUSY || B_DEV_FIFO_UNDERRUN || B_DEV_FIFO_OVERRUN) {
 				if (strict)
 					return B_ERROR;
 				continue;

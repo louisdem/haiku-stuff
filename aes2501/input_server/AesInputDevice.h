@@ -11,7 +11,7 @@
 
 #define COMPACT_DRIVER 1
 
-#define MAX_FRAMES 150
+#define MAX_FRAMES 150 // limit number of buffers for strip data
 #define GET_THRESHOLD (AES2501_REG_DATFMT - AES2501_REG_CTRL1) * 2 + 1
 
 #define PRINT_AES 1
@@ -38,6 +38,7 @@ enum state {
 	AES_DETECT_FINGER,
 	AES_RUN_CAPTURE,
 	AES_STRIP_SCAN,
+	AES_HANDLE_STRIPS,
 	AES_GET_CAPS,
 	AES_MOUSE_DOWN,
 	AES_MOUSE_UP,
@@ -78,8 +79,7 @@ class AesInputDevice: public BInputServerDevice {
 
 	BUSBDevice *device;
 	struct {
-		BUSBEndpoint *pipe_in,
-					 *pipe_out;
+		BUSBEndpoint *pipe_in, *pipe_out;
 	} dev_data;
 	AesSettings *settings;
 	thread_id DeviceWatcherId;

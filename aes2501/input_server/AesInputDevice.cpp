@@ -351,7 +351,6 @@ status_t AesInputDevice::DeviceWatcher()
 			sum = 0;
 			for (i = 1; i < 9; i++)
 				sum += (buf[i] & 0xf) + (buf[i] >> 4);
-
 			if (sum > 20) {
 				// fast handle of touch
 				if (!settings->handle_scroll) {
@@ -412,30 +411,24 @@ status_t AesInputDevice::DeviceWatcher()
 				s = AES_BREAK_LOOP;
 				break;
 			}
+
 			sum = 0;
 			// binded to little-endian machine
 			for (i = threshold; i < 16; i++)
 				sum += histogram[i];
-
-			if (sum < 0) {
-				// non fatal
+			if (sum > 0 && substate < MAX_FRAMES) {
+				substate++;
+				break;
+			}
+			if (sum < 0 /* non fatal */ || substate < 1) {
 				s = AES_DETECT_FINGER;
 				substate = false;
 				instant = false;
-				break;
 			}
-
-			substate++;
-			if (sum > 0 && substate < MAX_FRAMES) {
-				PRINT("sum: %d\n", sum);
-				break;
-			}
-
-			PRINT("sum: 0, substate: %d\n", substate);
-
-			s = AES_DETECT_FINGER;
-			substate = false;
-			instant = false;
+			else
+				s = AES_HANDLE_STRIPS;
+		break;
+		case AES_HANDLE_STRIPS:
 		break;
 #ifndef COMPACT_DRIVER
 		case AES_GET_CAPS:
@@ -505,16 +498,16 @@ status_t AesInputDevice::aes_setup_pipes(const BUSBInterface *uii)
 status_t AesInputDevice::aes_usb_read(unsigned char* const buf, size_t size)
 {
 	unsigned char *data;
+	status_t res;
 
 	if (!(data = (buf ? buf : (unsigned char *) malloc(size)) ))
 		return B_ERROR;
-
-	status_t res = bulk_transfer(AES2501_IN, data, size);
+	res = bulk_transfer(AES2501_IN, data, size);
 	if (!buf)
 		free(data);
+
 	switch (res) {
 		case B_DEV_FIFO_UNDERRUN:
-			// if (!buf)
 				return B_OK;
 		case B_DEV_FIFO_OVERRUN:
 			debug_printf("aes2501: data overrun."
@@ -527,8 +520,7 @@ status_t AesInputDevice::aes_usb_read(unsigned char* const buf, size_t size)
 /* Callbacks */
 status_t AesInputDevice::bulk_transfer(int direction, unsigned char *data, size_t size)
 {
-	BUSBEndpoint *dir = (direction == AES2501_OUT ? dev_data.pipe_out
-											  	  : dev_data.pipe_in);
+	BUSBEndpoint *dir = (direction == AES2501_OUT ? dev_data.pipe_out : dev_data.pipe_in);
 	ssize_t res;
 
 	if ((res = dir->BulkTransfer(data, size)) != size)
