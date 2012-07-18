@@ -1,0 +1,36 @@
+Use 'AddOptionalHaikuImagePackages Chicken' from UserBuildConfig
+--- OptionalPackages.orig	2012-07-18 20:24:47.685768704 +0400
++++ /boot/home/src/build/jam/OptionalPackages	2012-07-18 20:44:57.443285504 +0400
+@@ -31,6 +31,7 @@ if $(HAIKU_ADD_ALTERNATIVE_GCC_LIBS) = 1
+ #   Caya                    - a multiprotocol im client
+ #	CCache					- fast compiler cache
+ #	CDRecord				- the command line CD writing tools
++#	Chicken					- Scheme-to-C compiler
+ #	Clang					- the LLVM C and C++ compiler (llvm, libs, headers)
+ #	Clockwerk				- native audio/video compositing
+ #	CLucene					- indexed file search
+@@ -419,6 +420,24 @@ if [ IsOptionalHaikuImagePackageAdded CD
+ }
+ 
+ 
++# Chicken
++if [ IsOptionalHaikuImagePackageAdded Chicken ] {
++	if $(TARGET_ARCH) != x86 {
++		Echo "No optional package Chicken available for $(TARGET_ARCH)" ;
++	} else if $(HAIKU_GCC_VERSION[1]) >= 4 {
++		InstallOptionalHaikuImagePackage
++			chicken-4.7.0-x86-gcc4-2011-05-25.zip
++			: http://ports-space.haiku-files.org/dev-scheme/\
++				chicken-4.7.0-x86-gcc4-2011-05-25.zip ;
++	} else {
++		InstallOptionalHaikuImagePackage
++			chicken-4.5.0-x86-gcc2-2010-05-21.zip
++			: //ports-space.haiku-files.org/dev-scheme/\
++				chicken-4.5.0-x86-gcc2-2010-05-21.zip ;
++	}
++}
++
++
+ # Clang
+ if [ IsOptionalHaikuImagePackageAdded Clang ] {
+ 	if $(TARGET_ARCH) != x86 {
