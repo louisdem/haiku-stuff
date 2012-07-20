@@ -164,6 +164,7 @@ void AesInputDevice::SetSettings()
 	}
 	settings->handle_click = get_driver_boolean_parameter(handle, "handle_click", true, true);
 	settings->handle_scroll = get_driver_boolean_parameter(handle, "handle_scroll", true, true);
+	settings->do_scan = get_driver_boolean_parameter(handle, "do_scan", true, true);
 	unload_driver_settings(handle);
 }
 

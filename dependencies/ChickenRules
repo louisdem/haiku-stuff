@@ -1,0 +1,19 @@
+# /boot/home/src/build/jam/
+
+rule InstallChickenEggs
+object # Actions 'll be run only on existing targets (files)
+: sources
+{
+        local source ;
+
+        MakeLocateDebug $(object) ;
+
+        for source in $(sources) {
+                InstallChickenEggs1 $(object) : $(source) ; # Format required by Jam
+        }
+}
+
+actions InstallChickenEggs1
+{
+        chicken-install `echo $(2) | sed 's#.*/##'` # no grist
+}

@@ -68,8 +68,7 @@ enum aes2501_sensor_gain2 {
 
 typedef struct {
 	int8 which_button;
-	bool handle_click,
-		 handle_scroll;
+	bool handle_click, handle_scroll, do_scan;
 } AesSettings;
 
 class AesInputDevice;

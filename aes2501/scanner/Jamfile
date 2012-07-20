@@ -1,7 +1,13 @@
 SubDir HAIKU_TOP src bin aescan ;
 
-LINKFLAGS += -Xlinker -lchicken ;
+LINKFLAGS = -Xlinker -L/boot/common/lib ;
+
+#InstallChickenEggs [ FGristFiles main.o ] :
+#	bind
+#;
 
 BinCommand aescan :
 	main.scm
+	: chicken
+	: aescan.rdef
 ;

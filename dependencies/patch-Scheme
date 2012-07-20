@@ -57,9 +57,20 @@ Use 'AddOptionalHaikuImagePackages Chicken' from UserBuildConfig
 +
 +actions Scheme
 +{
-+        csc -o $(1) -c $(2) ;
++        csc -o $(1) -c $(2) -c++ ;
 +}
 +
  rule Yacc
  {
  	local source = $(1[1]) ;
+--- Jamrules.orig	2012-07-20 23:41:10.745799680 +0400
++++ /boot/home/src/Jamrules	2012-07-20 23:41:57.075235328 +0400
+@@ -53,6 +53,8 @@ include [ FDirName $(HAIKU_BUILD_RULES_D
+ include [ FDirName $(HAIKU_BUILD_RULES_DIR) TestsRules ] ;
+ include [ FDirName $(HAIKU_BUILD_RULES_DIR) BuildSetup ] ;
+ 
++include [ FDirName $(HAIKU_BUILD_RULES_DIR) ChickenRules ] ;
++
+ # Declare no-op user-overridable build rules.
+ rule UserBuildConfigRulePostBuildTargets	{ }
+ rule UserBuildConfigRulePreImage			{ }
