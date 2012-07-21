@@ -4,7 +4,6 @@ ProjectSubDir = HAIKU_TOP $(ProjectRelativeDir) ;
 
 SubDir $(ProjectSubDir) ;
 
-LINKFLAGS += -Xlinker -L/boot/common/lib ;
 SCHEMEFLAGS = "-c++ -I$(ProjectDirName)" ;
 
 #InstallChickenEggs [ FGristFiles main.o ] :
