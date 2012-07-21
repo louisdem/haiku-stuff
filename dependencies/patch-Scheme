@@ -34,35 +34,6 @@ Use 'AddOptionalHaikuImagePackages Chicken' from UserBuildConfig
  # Clang
  if [ IsOptionalHaikuImagePackageAdded Clang ] {
  	if $(TARGET_ARCH) != x86 {
---- /boot/home/src/build/jam/OverriddenJamRules.orig	2012-07-19 20:13:24.233570304 +0400
-+++ /boot/home/src/build/jam/OverriddenJamRules	2012-07-20 10:08:17.592707584 +0400
-@@ -159,6 +159,7 @@ rule Object
- 		case *.o :	return ;
- 	    case .s :	As $(<) : $(>) ;
- 	    case .S :	As $(<) : $(>) ;
-+	    case .scm : Scheme $(<) : $(>) ;
- 	    case .y :	if [ on $(2) return $(GENERATE_C++) ] {
- 	    				InheritPlatform $(1:S=.cpp) $(1:S=.hpp) : $(1) ;
- 						C++ $(1) : $(1:S=.cpp) ;
-@@ -224,6 +225,18 @@ actions Lex
- 	$(LEX) $(LEXFLAGS) -o$(1) $(2)
- }
- 
-+rule Scheme
-+{
-+        Depends $(1) : $(2) ;
-+        MakeLocateArch $(1) ;
-+        LocalClean clean : $(1) ;
-+}
-+
-+actions Scheme
-+{
-+        csc -o $(1) -c $(2) -c++ ;
-+}
-+
- rule Yacc
- {
- 	local source = $(1[1]) ;
 --- Jamrules.orig	2012-07-20 23:41:10.745799680 +0400
 +++ /boot/home/src/Jamrules	2012-07-20 23:41:57.075235328 +0400
 @@ -53,6 +53,8 @@ include [ FDirName $(HAIKU_BUILD_RULES_D
@@ -74,3 +45,34 @@ Use 'AddOptionalHaikuImagePackages Chicken' from UserBuildConfig
  # Declare no-op user-overridable build rules.
  rule UserBuildConfigRulePostBuildTargets	{ }
  rule UserBuildConfigRulePreImage			{ }
+--- /boot/home/src/build/jam/OverriddenJamRules.orig	2012-07-19 20:13:24.233570304 +0400
++++ /boot/home/src/build/jam/OverriddenJamRules	2012-07-21 02:57:09.892338176 +0400
+@@ -159,6 +159,7 @@ rule Object
+ 		case *.o :	return ;
+ 	    case .s :	As $(<) : $(>) ;
+ 	    case .S :	As $(<) : $(>) ;
++	    case .scm : Scheme $(<) : $(>) ;
+ 	    case .y :	if [ on $(2) return $(GENERATE_C++) ] {
+ 	    				InheritPlatform $(1:S=.cpp) $(1:S=.hpp) : $(1) ;
+ 						C++ $(1) : $(1:S=.cpp) ;
+@@ -224,6 +225,20 @@ actions Lex
+ 	$(LEX) $(LEXFLAGS) -o$(1) $(2)
+ }
+ 
++rule Scheme
++{
++        Depends $(1) : $(2) ;
++        MakeLocateArch $(1) ;
++        LocalClean clean : $(1) ;
++
++	Scheme1 $(1) : $(2) $(SCHEMEFLAGS) ;
++}
++
++actions Scheme1
++{
++        eval csc -o $(1) -c $(2[1]) `echo $(2[2]) | sed 's#.*/-#-#'` ;
++}
++
+ rule Yacc
+ {
+ 	local source = $(1[1]) ;

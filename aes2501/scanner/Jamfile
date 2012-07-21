@@ -1,6 +1,11 @@
-SubDir HAIKU_TOP src bin aescan ;
+ProjectRelativeDir = src bin aescan ;
+ProjectDirName = [ FDirName $(HAIKU_TOP) $(ProjectRelativeDir) ] ;
+ProjectSubDir = HAIKU_TOP $(ProjectRelativeDir) ;
 
-LINKFLAGS = -Xlinker -L/boot/common/lib ;
+SubDir $(ProjectSubDir) ;
+
+LINKFLAGS += -Xlinker -L/boot/common/lib ;
+SCHEMEFLAGS = "-c++ -I$(ProjectDirName)" ;
 
 #InstallChickenEggs [ FGristFiles main.o ] :
 #	bind
