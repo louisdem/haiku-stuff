@@ -1,6 +1,5 @@
 # Sisong IDE build script
 
-setgcc gcc2
 cd /boot/home/src/src/preferences/fujitsu
 jam -q
 %cp /boot/home/src/generated/objects/haiku/x86/release/preferences/fujitsu/FujitsuLaptop /boot/system/preferences/
