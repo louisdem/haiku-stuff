@@ -12,6 +12,6 @@ SCHEMEFLAGS = "-c++ -I$(ProjectDirName)" ;
 
 BinCommand aescan :
 	main.scm
-	: chicken
+	: chicken be
 	: aescan.rdef
 ;
