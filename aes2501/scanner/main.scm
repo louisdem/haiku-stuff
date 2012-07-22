@@ -4,6 +4,7 @@
 #include "app.h"
 EOF
 )
+; (define instance (force init-val))
 (define init-val (delay
  (let ((obj (new <AEScan> "application/x-vnd.Haiku-AEScan")))
   (_Run obj)
