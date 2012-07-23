@@ -11,5 +11,8 @@ EOF
   obj
  )
 ))
+(define (do-exit obj)
+ (delete (DoQuit obj))
+)
 
 ;;;
