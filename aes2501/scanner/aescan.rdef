@@ -1,6 +1,7 @@
 resource(1, "BEOS:APP_SIG") #'MIMS' "application/x-vnd.Haiku-AEScan";
 
-resource app_flags B_SINGLE_LAUNCH; // Limit to single instance
+resource app_flags B_SINGLE_LAUNCH /* Limit to single instance */ 
+		 | B_BACKGROUND_APP;
 
 resource app_version {
 	major  = 1,

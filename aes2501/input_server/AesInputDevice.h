@@ -2,12 +2,15 @@
 #define AES_INPUT_DEVICE_H
 
 #include "aes2501_common.h"
+#include "aes2501_app_common.h"
 
 #include <add-ons/input_server/InputServerDevice.h>
 #include <USBKit.h>
 
 #include <Entry.h>
 #include <driver_settings.h>
+
+#include <Messenger.h>
 
 #define COMPACT_DRIVER 1
 

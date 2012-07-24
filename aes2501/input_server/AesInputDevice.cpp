@@ -2,8 +2,8 @@
 
 #include "AesInputDevice.h"
 
-const static uint32 kPollThreadPriority = B_FIRST_REAL_TIME_PRIORITY + 4;
-const static uint32 kPollInterval = 1000000 * 0.055;
+const static uint32 kPollThreadPriority = B_FIRST_REAL_TIME_PRIORITY + 4,
+	kPollInterval = 1000000 * 0.055;
 const static char *kAesInputDirectory = "/dev/input/aes2501";
 
 
@@ -232,6 +232,9 @@ status_t AesInputDevice::DeviceWatcher()
 
 	unsigned char *pthres;
 
+	BMessenger *messenger;
+	status_t status;
+
 	const pairs det_fp_cmd[] = {
 	{ AES2501_REG_CTRL1, AES2501_CTRL1_MASTER_RESET },
 	{ AES2501_REG_EXCITCTRL, 0x40 },
@@ -430,6 +433,9 @@ status_t AesInputDevice::DeviceWatcher()
 				s = AES_HANDLE_STRIPS;
 		break;
 		case AES_HANDLE_STRIPS:
+			if (settings->do_scan) {
+				messenger = new BMessenger(kAesSignature, -1, &status);
+			}
 		break;
 #ifndef COMPACT_DRIVER
 		case AES_GET_CAPS:
