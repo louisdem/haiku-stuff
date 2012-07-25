@@ -16,10 +16,10 @@ instantiate_input_device()
 	return (InputDevice = new AesInputDevice());
 }
 AesInputDevice::AesInputDevice()
+: device(NULL),
+  URoster(NULL), settings(NULL),
+  BBuffers(NULL)
 {
-	device = NULL;
-
-	URoster = NULL; settings = NULL;
 }
 AesInputDevice::~AesInputDevice()
 {
@@ -221,16 +221,20 @@ status_t AesInputDevice::DeviceWatcher()
 	bool instant = false;
 	state s = AES_DETECT_FINGER;
 
+
 	int substate = false, sum, i;
 	unsigned char *buf;
 
+
 	BMessage *message;
+
+	bool click_only = !settings->handle_scroll && !settings->do_scan;
+
+	unsinged char *pthres;
 
 	int threshold;
 	unsigned char *data;
 	uint16 *histogram;
-
-	unsigned char *pthres;
 
 	BMessenger *messenger;
 	status_t status;
@@ -322,7 +326,7 @@ status_t AesInputDevice::DeviceWatcher()
 	};
 
 
-	if (settings->handle_scroll) {
+	if (settings->handle_scroll || settings->do_scan) {
 		if (!(buf = (unsigned char *) malloc(
 #ifndef COMPACT_DRIVER
 			1705 /* 159 */)))
@@ -357,7 +361,7 @@ status_t AesInputDevice::DeviceWatcher()
 				sum += (buf[i] & 0xf) + (buf[i] >> 4);
 			if (sum > 20) {
 				// fast handle of touch
-				if (!settings->handle_scroll) {
+				if (click_only) {
 					if (!substate) {
 						s = AES_MOUSE_DOWN;
 						instant = true;
@@ -387,6 +391,12 @@ status_t AesInputDevice::DeviceWatcher()
 					s = AES_BREAK_LOOP;
 					break;
 				}
+
+			this->BBuffers = new BBufferGroup();
+			if (BBuffers->InitCheck() != B_OK) {
+				s = AES_BREAK_LOOP;
+				break;
+			}
 
 			s = AES_STRIP_SCAN;
 		break;
@@ -426,8 +436,7 @@ status_t AesInputDevice::DeviceWatcher()
 			}
 			if (sum < 0 /* non fatal */ || substate < 1) {
 				s = AES_DETECT_FINGER;
-				substate = false;
-				instant = false;
+				substate = instant = false;
 			}
 			else
 				s = AES_HANDLE_STRIPS;
@@ -435,7 +444,16 @@ status_t AesInputDevice::DeviceWatcher()
 		case AES_HANDLE_STRIPS:
 			if (settings->do_scan) {
 				messenger = new BMessenger(kAesSignature, -1, &status);
+				if (status != B_OK) {
+					delete messenger;
+
+					s = AES_DETECT_FINGER;
+					substate = instant = false;
+				}
 			}
+
+			s = AES_DETECT_FINGER;
+			substate = instant = false;
 		break;
 #ifndef COMPACT_DRIVER
 		case AES_GET_CAPS:
