@@ -10,6 +10,7 @@
 #include <Entry.h>
 #include <driver_settings.h>
 
+#include <Buffer.h>
 #include <BufferGroup.h>
 #include <Messenger.h>
 
@@ -86,7 +87,6 @@ class AesInputDevice: public BInputServerDevice {
 	} dev_data;
 	AesSettings *settings;
 	thread_id DeviceWatcherId;
-	BBufferGroup *BBuffers;
 public:
 	AesInputDevice();
 	virtual ~AesInputDevice();

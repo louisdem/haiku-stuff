@@ -17,7 +17,8 @@ instantiate_input_device()
 }
 AesInputDevice::AesInputDevice()
 : device(NULL),
-  URoster(NULL), settings(NULL)
+  URoster(NULL), settings(NULL),
+  BBuffers(NULL)
 {
 }
 AesInputDevice::~AesInputDevice()
@@ -229,15 +230,12 @@ status_t AesInputDevice::DeviceWatcher()
 
 	bool click_only = !settings->handle_scroll && !settings->do_scan;
 
-	unsigned char *pthres;
+	unsinged char *pthres;
 
 	int threshold;
-	unsigned char *data;
+	unsigned char *data, *stripdata;
 	uint16 *histogram;
-	buffer_clone_info info;
-	BBuffer *buffer;
 
-	BBufferGroup *BBuffers = NULL;
 	BMessenger *messenger;
 	status_t status;
 
@@ -328,7 +326,7 @@ status_t AesInputDevice::DeviceWatcher()
 	};
 
 
-	if (!click_only) {
+	if (settings->handle_scroll || settings->do_scan) {
 		if (!(buf = (unsigned char *) malloc(
 #ifndef COMPACT_DRIVER
 			1705 /* 159 */)))
@@ -339,15 +337,7 @@ status_t AesInputDevice::DeviceWatcher()
 			return 0;
 			threshold = 8;
 #endif
-		uint8* bits = buf + 1;
-                info.area = area_for(bits);
-		area_info areainfo;
-		if (get_area_info(info.area, &areainfo) != B_OK)
-			return 0;
-                info.offset = bits - (uint8 *) areainfo.address;
-                info.size = 192*8;
-
-		data = buf + 1 + info.size /* = buf */;
+		data = buf + 1 + 192*8 /* = buf */;
 		histogram = (uint16 *)(data + 1);
 		pthres = data + 1 + 16*2 + 1 + 8; /* buf + 1 + 16*2 */
 	}
@@ -402,7 +392,7 @@ status_t AesInputDevice::DeviceWatcher()
 					break;
 				}
 
-			BBuffers = new BBufferGroup();
+			this->BBuffers = new BBufferGroup();
 			if (BBuffers->InitCheck() != B_OK) {
 				s = AES_BREAK_LOOP;
 				break;
@@ -442,8 +432,6 @@ status_t AesInputDevice::DeviceWatcher()
 				sum += histogram[i];
 			if (sum > 0 && substate < MAX_FRAMES) {
 				substate++;
-				if (BBuffers->AddBuffer(info, &buffer) != B_OK)
-					s = AES_BREAK_LOOP;
 				break;
 			}
 			if (sum < 0 /* non fatal */ || substate < 1) {
@@ -509,9 +497,9 @@ status_t AesInputDevice::DeviceWatcher()
 			snooze(kPollInterval);
 	}
 
-	if (!click_only)
+	if (settings->handle_scroll && buf)
 		free(buf);
-	if (BBuffers)
+	if (this->BBuffers)
 		delete BBuffers;
 }
 
