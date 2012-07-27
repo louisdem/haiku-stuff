@@ -224,14 +224,15 @@ status_t AesInputDevice::DeviceWatcher()
 	int substate = false, sum, i;
 	unsigned char *buf;
 
+	int threshold;
 
 	BMessage *message;
+
 
 	bool click_only = !settings->handle_scroll && !settings->do_scan;
 
 	unsigned char *pthres;
 
-	int threshold;
 	unsigned char *data;
 	uint16 *histogram;
 	buffer_clone_info info;
