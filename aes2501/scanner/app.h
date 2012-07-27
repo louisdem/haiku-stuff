@@ -1,9 +1,6 @@
 #ifndef AESCAN_H
 #define AESCAN_H
 
-// (bind-opaque-type thread_func (function integer32 (c-pointer)))
-typedef long (*thread_func)(void *);
-
 ___abstract class Proto
 {
 public:
