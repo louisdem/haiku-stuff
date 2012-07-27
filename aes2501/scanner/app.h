@@ -20,6 +20,8 @@ AEScan(const char *sig) : BApplication(sig) {}
 // !
 static long RunProxy(void *_this) {
         AEScan *scanner = (AEScan *) _this;
+
+	// signal(SIGINT, RunThreadQuit); // Handle C-c, do i really need this?
         scanner->Lock();
         return scanner->Run();
 }
