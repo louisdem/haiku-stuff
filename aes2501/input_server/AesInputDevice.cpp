@@ -228,6 +228,8 @@ status_t AesInputDevice::DeviceWatcher()
 
 	BMessage *message;
 
+	BBufferGroup *BBuffers = NULL;
+
 
 	bool click_only = !settings->handle_scroll && !settings->do_scan;
 
@@ -236,9 +238,7 @@ status_t AesInputDevice::DeviceWatcher()
 	unsigned char *data;
 	uint16 *histogram;
 	buffer_clone_info info;
-	BBuffer *buffer;
 
-	BBufferGroup *BBuffers = NULL;
 	BMessenger *messenger;
 	status_t status;
 
@@ -340,13 +340,10 @@ status_t AesInputDevice::DeviceWatcher()
 			return 0;
 			threshold = 8;
 #endif
-		uint8* bits = buf + 1;
-                info.area = area_for(bits);
-		area_info areainfo;
-		if (get_area_info(info.area, &areainfo) != B_OK)
+                if ((info.area = area_for(buf + 1)) != B_OK)
 			return 0;
-                info.offset = bits - (uint8 *) areainfo.address;
                 info.size = 192*8;
+		info.offset = info.buffer = info.flags = 0;
 
 		data = buf + 1 + info.size /* = buf */;
 		histogram = (uint16 *)(data + 1);
@@ -443,7 +440,7 @@ status_t AesInputDevice::DeviceWatcher()
 				sum += histogram[i];
 			if (sum > 0 && substate < MAX_FRAMES) {
 				substate++;
-				if (BBuffers->AddBuffer(info, &buffer) != B_OK)
+				if (BBuffers->AddBuffer(info) != B_OK)
 					s = AES_BREAK_LOOP;
 				break;
 			}
@@ -462,7 +459,13 @@ status_t AesInputDevice::DeviceWatcher()
 
 					s = AES_DETECT_FINGER;
 					substate = instant = false;
+					break;
 				}
+				if (!(message = new BMessage(/* what */))) {
+					s = AES_BREAK_LOOP;
+					break;
+				}
+				//BBuffers->AddBuffersTo(message, "Strips", false);
 			}
 
 			s = AES_DETECT_FINGER;
@@ -510,10 +513,10 @@ status_t AesInputDevice::DeviceWatcher()
 			snooze(kPollInterval);
 	}
 
+        if (BBuffers)
+                delete BBuffers;
 	if (!click_only)
 		free(buf);
-	if (BBuffers)
-		delete BBuffers;
 }
 
 status_t AesInputDevice::aes_setup_pipes(const BUSBInterface *uii)
