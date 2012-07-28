@@ -445,6 +445,8 @@ status_t AesInputDevice::DeviceWatcher()
 				break;
 			}
 			if (sum < 0 /* non fatal */ || substate < 1) {
+				delete BBuffers;
+
 				s = AES_DETECT_FINGER;
 				substate = instant = false;
 			}
@@ -465,7 +467,7 @@ status_t AesInputDevice::DeviceWatcher()
 					s = AES_BREAK_LOOP;
 					break;
 				}
-				//BBuffers->AddBuffersTo(message, "Strips", false);
+				this->AddBuffersTo(BBuffers, message);
 			}
 
 			s = AES_DETECT_FINGER;
@@ -508,7 +510,6 @@ status_t AesInputDevice::DeviceWatcher()
 
 		if (s == AES_BREAK_LOOP)
 			break;
-
 		if (!instant)
 			snooze(kPollInterval);
 	}
@@ -517,6 +518,26 @@ status_t AesInputDevice::DeviceWatcher()
                 delete BBuffers;
 	if (!click_only)
 		free(buf);
+}
+
+status_t AesInputDevice::AddBuffersTo(BBufferGroup *group, BMessage *message)
+{
+	int32 count, i;
+	BBuffer **buffers;
+
+	group->CountBuffers(&count);
+	buffers = new BBuffer * [count];	
+	if (!group->GetBufferList(count, buffers)) {
+		delete [] buffers;
+		return B_ERROR;
+	}
+
+	message->AddInt32("count", count);
+	for (i = 0; i < count; i++)
+		message->AddInt32("buffer", buffers[i]->ID());
+
+	delete [] buffers;
+	return B_OK;
 }
 
 status_t AesInputDevice::aes_setup_pipes(const BUSBInterface *uii)

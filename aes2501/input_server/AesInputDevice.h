@@ -105,6 +105,7 @@ private:
 		AesInputDevice *dev = (AesInputDevice *) _this;
 		return dev->DeviceWatcher();
 	}
+	status_t AddBuffersTo(BBufferGroup *, BMessage *);
 	status_t aes_setup_pipes(const BUSBInterface *);
 	status_t aes_usb_read(unsigned char* const, size_t);
 
