@@ -239,7 +239,7 @@ status_t AesInputDevice::DeviceWatcher()
 	uint16 *histogram;
 	buffer_clone_info info;
 
-	BMessenger *messenger;
+	BMessenger *messenger = NULL;
 	status_t status;
 
 	const pairs det_fp_cmd[] = {
@@ -445,7 +445,7 @@ status_t AesInputDevice::DeviceWatcher()
 				break;
 			}
 			if (sum < 0 /* non fatal */ || substate < 1) {
-				delete BBuffers;
+				delete BBuffers; BBuffers = NULL;
 
 				s = AES_DETECT_FINGER;
 				substate = instant = false;
@@ -457,17 +457,18 @@ status_t AesInputDevice::DeviceWatcher()
 			if (settings->do_scan) {
 				messenger = new BMessenger(kAesSignature, -1, &status);
 				if (status != B_OK) {
-					delete messenger;
+					delete messenger; delete BBuffers;
+					messenger = NULL; BBuffers = NULL;
 
 					s = AES_DETECT_FINGER;
 					substate = instant = false;
 					break;
 				}
-				if (!(message = new BMessage(/* what */))) {
+				if (!(message = new BMessage(/* what */)) ||
+					this->AddBuffersTo(BBuffers, message) != B_OK) {
 					s = AES_BREAK_LOOP;
 					break;
 				}
-				this->AddBuffersTo(BBuffers, message);
 			}
 
 			s = AES_DETECT_FINGER;
@@ -514,10 +515,12 @@ status_t AesInputDevice::DeviceWatcher()
 			snooze(kPollInterval);
 	}
 
-        if (BBuffers)
-                delete BBuffers;
 	if (!click_only)
 		free(buf);
+	if (BBuffers)
+		delete BBuffers;
+	if (messenger)
+		delete messenger;
 }
 
 status_t AesInputDevice::AddBuffersTo(BBufferGroup *group, BMessage *message)
