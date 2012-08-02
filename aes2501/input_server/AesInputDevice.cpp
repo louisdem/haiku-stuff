@@ -340,9 +340,9 @@ status_t AesInputDevice::DeviceWatcher()
 			return 0;
 			threshold = 8;
 #endif
-                if ((info.area = area_for(buf + 1)) != B_OK)
+		if ((info.area = area_for(buf + 1)) == B_ERROR)
 			return 0;
-                info.size = 192*8;
+		info.size = 192*8;
 		info.offset = info.buffer = info.flags = 0;
 
 		data = buf + 1 + info.size /* = buf */;
@@ -457,22 +457,21 @@ status_t AesInputDevice::DeviceWatcher()
 			if (settings->do_scan) {
 				messenger = new BMessenger(kAesSignature, -1, &status);
 				if (status != B_OK) {
-					delete messenger; delete BBuffers;
-					messenger = NULL; BBuffers = NULL;
+					delete messenger; messenger = NULL;
+					if (!settings->handle_scroll) {
+						delete BBuffers; BBuffers = NULL;
 
-					s = AES_DETECT_FINGER;
-					substate = instant = false;
-					break;
+						s = AES_DETECT_FINGER;
+						substate = instant = false;
+						break;
+					}
 				}
-				if (!(message = new BMessage(/* what */)) ||
+				if (!(message = new BMessage(kAesBufferGroupMessage)) ||
 					this->AddBuffersTo(BBuffers, message) != B_OK) {
 					s = AES_BREAK_LOOP;
 					break;
 				}
 			}
-
-			s = AES_DETECT_FINGER;
-			substate = instant = false;
 		break;
 #ifndef COMPACT_DRIVER
 		case AES_GET_CAPS:
@@ -529,7 +528,7 @@ status_t AesInputDevice::AddBuffersTo(BBufferGroup *group, BMessage *message)
 	BBuffer **buffers;
 
 	group->CountBuffers(&count);
-	buffers = new BBuffer * [count];	
+	buffers = new BBuffer * [count];
 	if (!group->GetBufferList(count, buffers)) {
 		delete [] buffers;
 		return B_ERROR;
