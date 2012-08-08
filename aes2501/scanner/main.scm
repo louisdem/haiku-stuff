@@ -23,3 +23,13 @@
 ))
 
 ;;;
+
+(define (greet-user)
+ (print "This program will enroll your right index finger, "
+  "unconditionally overwriting any right-index print that was enrolled "
+  "previously. If you want to continue, hit enter, otherwise press "
+  "something else")
+ (eq? (read-char) #\newline)
+)
+
+;;;

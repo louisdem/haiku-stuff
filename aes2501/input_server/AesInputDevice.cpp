@@ -454,24 +454,44 @@ status_t AesInputDevice::DeviceWatcher()
 				s = AES_HANDLE_STRIPS;
 		break;
 		case AES_HANDLE_STRIPS:
-			if (settings->do_scan) {
+			if (!settings->do_scan) {
+				s = AES_HANDLE_SCROLL;
+				break;
+			} else {
+				s = settings->handle_scroll ? AES_HANDLE_SCROLL : AES_DETECT_FINGER;
+
 				messenger = new BMessenger(kAesSignature, -1, &status);
 				if (status != B_OK) {
 					delete messenger; messenger = NULL;
-					if (!settings->handle_scroll) {
+					if (s == AES_DETECT_FINGER) {
 						delete BBuffers; BBuffers = NULL;
-
-						s = AES_DETECT_FINGER;
 						substate = instant = false;
-						break;
 					}
+					break;
 				}
-				if (!(message = new BMessage(kAesBufferGroupMessage)) ||
-					this->AddBuffersTo(BBuffers, message) != B_OK) {
+				if (!(message = new BMessage(kAesBufferGroupMessage))) {
 					s = AES_BREAK_LOOP;
 					break;
 				}
+				if (this->AddBuffersTo(BBuffers, message) != B_OK) {
+					delete message;
+
+					s = AES_BREAK_LOOP;
+					break;
+				}
+				if (messenger->SendMessage(message, (BHandler *) NULL, 1000) != B_OK) {
+					delete message;
+					delete messenger; messenger = NULL;
+					if (s == AES_DETECT_FINGER) {
+						delete BBuffers; BBuffers = NULL;
+					}
+				}
 			}
+
+			if (s == AES_DETECT_FINGER)
+				substate = instant = false;
+		break;
+		case AES_HANDLE_SCROLL:
 		break;
 #ifndef COMPACT_DRIVER
 		case AES_GET_CAPS:
