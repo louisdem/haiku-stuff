@@ -1,9 +1,13 @@
+; Written by Artem Falcon <lomka@gero.in>
+
 (require-extension bind coops cplusplus-object)
 (bind* "#include <Application.h>\n#include <kernel/OS.h>\n"
  "#include \"app.h\"\n#include \"common/aes2501_app_common.h\"")
-#|(define spawn_thread (foreign-lambda integer32 "spawn_thread"
+
+#|(define spawn-thread (foreign-lambda integer32 "spawn_thread"
  (function integer32 (c-pointer)) (const c-string) integer32 c-pointer))|#
-(define resume_thread (foreign-lambda integer32 "resume_thread" integer32))
+(define resume-thread (foreign-lambda integer32 "resume_thread" integer32))
+
 
 (define (make-kernel-thread obj)
  (SpawnThreadProxy "AEScan Runner" 50 obj)
@@ -11,7 +15,7 @@
 (define (b-good? ch) (if (>= ch 0) #t #f))
 (define (kernel-thread-start! th)
  (if (b-good? th)
-  (resume_thread th)
+  (resume-thread th)
  )
 )
 ; (define instance (force init-val))
@@ -22,9 +26,18 @@
  )
 ))
 
+(define-method (SMessageReceived (x <AEScan>) message)
+ (let ((ltr (integer->char (message-what))))
+  ; datums must be distinct :(
+  (case ltr
+  ((#\b) (display "yup\n"))
+  (else (display "nope\n"))
+ )
+))
+
 ;;;
 
-(define (greet-user)
+(define (may-continue?)
  (print "This program will enroll your right index finger, "
   "unconditionally overwriting any right-index print that was enrolled "
   "previously. If you want to continue, hit enter, otherwise press "

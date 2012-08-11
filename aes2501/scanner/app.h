@@ -4,7 +4,7 @@
 ___abstract class Proto
 {
 public:
-virtual void MessageReceived(BMessage*) = 0;
+virtual void MessageReceived(BMessage* ) = 0;
 virtual void ReadyToRun() { be_app->PostMessage(B_QUIT_REQUESTED); }
 };
 class AEScan: public BApplication
@@ -12,6 +12,7 @@ class AEScan: public BApplication
 public:
 AEScan(const char *sig) : BApplication(sig) {}
 ~AEScan() { be_app_messenger.SendMessage(B_QUIT_REQUESTED); }
+virtual void MessageReceived(BMessage *m) {}
 };
 
 // !
@@ -24,6 +25,6 @@ static long RunProxy(void *_this) {
 }
 static long SpawnThreadProxy(const char *s, long p, AEScan *o) {
         return spawn_thread(RunProxy /* ! */, s, p, o);
-};
+}
 
 #endif
