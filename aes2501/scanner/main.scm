@@ -7,6 +7,9 @@
 #|(define spawn-thread (foreign-lambda integer32 "spawn_thread"
  (function integer32 (c-pointer)) (const c-string) integer32 c-pointer))|#
 (define resume-thread (foreign-lambda integer32 "resume_thread" integer32))
+(bind-opaque-type b_message_ptr (c-pointer "BMessage"))
+(define-external (SMessageReceived (scheme-object obj) (b_message_ptr mes))
+ void (MessageReceived obj mes))
 
 
 (define (make-kernel-thread obj)
@@ -26,7 +29,7 @@
  )
 ))
 
-(define-method (SMessageReceived (x <AEScan>) message)
+(define-method (MessageReceived (x <AEScan>) message)
  (let ((ltr (integer->char (message-what))))
   ; datums must be distinct :(
   (case ltr

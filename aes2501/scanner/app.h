@@ -1,6 +1,8 @@
 #ifndef AESCAN_H
 #define AESCAN_H
 
+extern void SMessageReceived(C_word, BMessage *);
+
 ___abstract class Proto
 {
 public:
@@ -12,14 +14,14 @@ class AEScan: public BApplication
 public:
 AEScan(const char *sig) : BApplication(sig) {}
 ~AEScan() { be_app_messenger.SendMessage(B_QUIT_REQUESTED); }
-virtual void MessageReceived(BMessage *m) {}
+void MessageReceived(BMessage *m) { SMessageReceived(CHICKEN_gc_root_ref(this), m); }
 };
 
 // !
 static long RunProxy(void *_this) {
         AEScan *scanner = (AEScan *) _this;
 
-	// signal(SIGINT, RunThreadQuit); // Handle C-c, do i really need this?
+        // signal(SIGINT, RunThreadQuit); // Handle C-c, do i really need this?
         scanner->Lock();
         return scanner->Run();
 }
