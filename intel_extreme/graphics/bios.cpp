@@ -1,5 +1,4 @@
-/* Written by Artem Falcon <lomka@gero.in>
- * Based on the code by Eric Anholt <eric@anholt.net> */
+/* Written by Artem Falcon <lomka@gero.in> */
 
 #include <KernelExport.h>
 #include "intel_extreme.h"
