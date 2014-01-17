@@ -126,7 +126,7 @@ get_bios(void)
 	int vbt_offset;
 	struct vbt_header *vbt;
 
-	/* !!!DANGER!!!: mapping of BIOS using legacy location for now,
+	/* warning: mapping of BIOS using legacy location for now,
 	 * hence, if panel mode will be set using info from VBT, it will
 	 * be taken from primary card's VBIOS */
 	vbios.area = map_physical_memory("VBIOS mapping",
